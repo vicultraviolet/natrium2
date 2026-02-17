@@ -44,4 +44,6 @@
 #include <fmt/format.h>
 #include <fmt/chrono.h>
 
+#include "Natrium2/Template/ArrayIterators.hpp"
+#include "Natrium2/Template/ArrayList.hpp"
 #endif // NA2_PCH_BASE_HPP
