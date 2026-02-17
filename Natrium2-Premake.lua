@@ -35,7 +35,7 @@ project "Natrium2"
         "%{IncludeDirectories.fmt}",
         "dependencies/",
         "include/",
-        "src/Natrium/"
+        "src/"
     }
 
     links {
