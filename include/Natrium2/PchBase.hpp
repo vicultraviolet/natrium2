@@ -46,4 +46,5 @@
 
 #include "Natrium2/Template/ArrayIterators.hpp"
 #include "Natrium2/Template/ArrayList.hpp"
+#include "Natrium2/Template/References.hpp"
 #endif // NA2_PCH_BASE_HPP

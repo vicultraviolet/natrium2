@@ -1,0 +1,620 @@
+#if !defined(NA2_REF_HPP)
+#define NA2_REF_HPP
+
+#include "Natrium2/Core.hpp"
+
+namespace Na2
+{
+	template<typename T>
+	class UniqueRef {
+	public:
+		UniqueRef(void) = default;
+		~UniqueRef(void) { this->destroy(); }
+
+		UniqueRef(nullptr_t) {};
+		UniqueRef& operator=(nullptr_t)
+		{
+			this->destroy();
+			return *this;
+		}
+
+		UniqueRef(T* ptr) : m_Ptr(ptr) {}
+		UniqueRef& operator=(T* ptr)
+		{
+			this->destroy();
+			m_Ptr = ptr;
+			return *this;
+		}
+
+		template<typename... t_Args>
+		static UniqueRef Make(t_Args&&... __args)
+		{
+			return UniqueRef(new T(std::forward<t_Args>(__args)...));
+		}
+
+		UniqueRef(const UniqueRef& other) = delete;
+		UniqueRef& operator=(const UniqueRef& other) = delete;
+
+		UniqueRef(UniqueRef&& other) noexcept
+		: m_Ptr(std::exchange(other.m_Ptr, nullptr))
+		{}
+
+		UniqueRef& operator=(UniqueRef&& other) noexcept
+		{
+			this->destroy();
+			m_Ptr = std::exchange(other.m_Ptr, nullptr);
+			return *this;
+		}
+
+		void swap(UniqueRef& other)
+		{
+			std::swap(m_Ptr, other.m_Ptr);
+		}
+
+		void destroy(void)
+		{
+			delete m_Ptr;
+			m_Ptr = nullptr;
+		}
+
+		T* release(void)
+		{
+			if (!m_Ptr)
+				return nullptr;
+
+			T* temp = m_Ptr;
+			m_Ptr = nullptr;
+			return temp;
+		}
+
+		template<typename U, std::enable_if_t<std::is_base_of_v<U, T>, int> = 0>
+		[[nodiscard]] inline operator UniqueRef<U>(void)&& { return UniqueRef<U>(this->release()); }
+
+		[[nodiscard]] inline T* ptr(void) { return m_Ptr; }
+		[[nodiscard]] inline const T* ptr(void) const { return m_Ptr; }
+
+		[[nodiscard]] inline T& operator*(void) { return *m_Ptr; }
+		[[nodiscard]] inline const T& operator*(void) const { return *m_Ptr; }
+
+		[[nodiscard]] inline T* operator->(void) { return m_Ptr; }
+		[[nodiscard]] inline const T* operator->(void) const { return m_Ptr; }
+
+		[[nodiscard]] inline auto operator<=>(const UniqueRef& other) const { return m_Ptr <=> other.m_Ptr; }
+		[[nodiscard]] inline auto operator==(const UniqueRef& other) const { return m_Ptr == other.m_Ptr; }
+
+		[[nodiscard]] inline operator bool(void) const { return m_Ptr; }
+	private:
+		template<typename To, typename From>
+		friend UniqueRef<To> static_ref_cast(UniqueRef<From>&& from);
+
+		template<typename To, typename From>
+		friend UniqueRef<To> dynamic_ref_cast(UniqueRef<From>&& from);
+
+		T* m_Ptr = nullptr;
+	};
+
+	template<typename T, typename... t_Args>
+	UniqueRef<T> MakeUnique(t_Args&&... __args)
+	{
+		return UniqueRef<T>::Make(std::forward<t_Args>(__args)...);
+	}
+
+	template<typename T>
+	using ConstUniqueRef = UniqueRef<const T>;
+
+	template<typename To, typename From>
+	UniqueRef<To> static_ref_cast(UniqueRef<From>&& from)
+	{
+		using FromPtr = decltype(from.ptr());
+		To* casted = (To*)const_cast<std::remove_const_t<std::remove_pointer_t<FromPtr>>*>(from.ptr());
+		from.release();
+		return UniqueRef<To>(casted);
+	}
+
+	template<typename To, typename From>
+	UniqueRef<To> dynamic_ref_cast(UniqueRef<From>&& from)
+	{
+		using FromPtr = decltype(from.ptr());
+		To* casted = dynamic_cast<To*>(const_cast<std::remove_const_t<std::remove_pointer_t<FromPtr>>*>(from.ptr()));
+		if (!casted)
+			return nullptr;
+		from.release();
+		return UniqueRef<To>(casted);
+	}
+
+	template<typename T>
+	struct RefControlBlock {
+		T* ptr = nullptr;
+		std::atomic<u64> strong_count = 0;
+		std::atomic<u64> weak_count = 0;
+
+		RefControlBlock(void) = default;
+		~RefControlBlock(void) { delete ptr; }
+
+		RefControlBlock(T* ptr) : ptr(ptr) {}
+
+		template<typename... t_Args>
+		static RefControlBlock* Make(t_Args&&... __args)
+		{
+			return new RefControlBlock(new T(std::forward<t_Args>(__args)...));
+		}
+
+		void inc_strong_count(void) { this->strong_count.fetch_add(1, std::memory_order_relaxed); }
+		void dec_strong_count(void) { this->strong_count.fetch_sub(1, std::memory_order_relaxed); }
+
+		void inc_weak_count(void) { this->weak_count.fetch_add(1, std::memory_order_relaxed); }
+		void dec_weak_count(void) { this->weak_count.fetch_sub(1, std::memory_order_relaxed); }
+	};
+
+	template<typename T>
+	class WeakRef;
+
+	template<typename T>
+	class Ref {
+	public:
+		using ControlBlock = RefControlBlock<T>;
+
+		Ref(void) = default;
+		~Ref(void) { this->release(); }
+
+		Ref(nullptr_t) {}
+		Ref& operator=(nullptr_t)
+		{
+			this->release();
+			return *this;
+		}
+
+		explicit Ref(ControlBlock* cb)
+		: m_ControlBlock(cb)
+		{
+			if (m_ControlBlock)
+				m_ControlBlock->inc_strong_count();
+		}
+
+		template<typename... t_Args>
+		static Ref Make(t_Args&&... __args)
+		{
+			return Ref(ControlBlock::Make(std::forward<t_Args>(__args)...));
+		}
+
+		Ref(UniqueRef<T>&& unique)
+		: Ref(new ControlBlock(unique.release()))
+		{}
+
+		Ref(const Ref& other)
+		: Ref(other.m_ControlBlock)
+		{}
+
+		Ref& operator=(const Ref& other)
+		{
+			if (m_ControlBlock == other.m_ControlBlock)
+				return *this;
+
+			this->release();
+			if (other)
+			{
+				m_ControlBlock = other.m_ControlBlock;
+				m_ControlBlock->inc_strong_count();
+			}
+
+			return *this;
+		}
+
+		Ref(Ref&& other) noexcept
+		: m_ControlBlock(std::exchange(other.m_ControlBlock, nullptr))
+		{}
+
+		Ref& operator=(Ref&& other) noexcept
+		{
+			if (m_ControlBlock == other.m_ControlBlock)
+				return *this;
+
+			this->release();
+			if (other)
+				m_ControlBlock = std::exchange(other.m_ControlBlock, nullptr);
+			return *this;
+		}
+
+		void swap(Ref& other)
+		{
+			std::swap(m_ControlBlock, other.m_ControlBlock);
+		}
+
+		void release(void)
+		{
+			if (this->expired())
+				return;
+
+			m_ControlBlock->dec_strong_count();
+			if (!m_ControlBlock->strong_count)
+			{
+				delete m_ControlBlock->ptr;
+				m_ControlBlock->ptr = nullptr;
+
+				if (!m_ControlBlock->weak_count)
+					delete m_ControlBlock;
+			}
+			m_ControlBlock = nullptr;
+		}
+
+		template<typename U, std::enable_if_t<std::is_base_of_v<U, T>, int> = 0>
+		[[nodiscard]] operator Ref<U>(void) const
+		{
+			return Ref<U>((typename Ref<U>::ControlBlock*)this->m_ControlBlock);
+		}
+
+		[[nodiscard]] inline u64 strong_count(void) const { return m_ControlBlock->strong_count.load(); }
+		[[nodiscard]] inline u64 weak_count(void) const { return m_ControlBlock->weak_count.load(); }
+
+		[[nodiscard]] inline T* ptr(void) { return m_ControlBlock->ptr; }
+		[[nodiscard]] inline const T* ptr(void) const { return m_ControlBlock->ptr; }
+
+		[[nodiscard]] inline T& operator*(void) { return *m_ControlBlock->ptr; }
+		[[nodiscard]] inline const T& operator*(void) const { return *m_ControlBlock->ptr; }
+
+		[[nodiscard]] inline T* operator->(void) { return m_ControlBlock->ptr; }
+		[[nodiscard]] inline const T* operator->(void) const { return m_ControlBlock->ptr; }
+
+		[[nodiscard]] inline auto operator<=>(const Ref& other) const { return m_ControlBlock->ptr <=> other.m_ControlBlock->ptr; }
+		[[nodiscard]] inline auto operator==(const Ref& other) const { return m_ControlBlock->ptr == other.m_ControlBlock->ptr; }
+
+		[[nodiscard]] inline bool expired(void) const { return !m_ControlBlock || !m_ControlBlock->strong_count.load(); }
+		[[nodiscard]] inline operator bool(void) const { return m_ControlBlock; }
+	private:
+		friend class WeakRef<T>;
+		friend class WeakRef<const T>;
+
+		template<typename To, typename From>
+		friend Ref<To> static_ref_cast(const Ref<From>& from);
+
+		template<typename To, typename From>
+		friend Ref<To> dynamic_ref_cast(const Ref<From>& from);
+
+		ControlBlock* m_ControlBlock = nullptr;
+	};
+
+	template<typename T, typename... t_Args>
+	Ref<T> MakeRef(t_Args&&... __args)
+	{
+		return Ref<T>::Make(std::forward<t_Args>(__args)...);
+	}
+	
+	template<typename T>
+	using ConstRef = Ref<const T>;
+
+	template<typename T>
+	using SharedRef = Ref<T>;
+
+	template<typename T>
+	using ConstSharedRef = SharedRef<const T>;
+
+	template<typename T, typename... t_Args>
+	SharedRef<T> MakeShared(t_Args&&... __args)
+	{
+		return SharedRef<T>::Make(std::forward<t_Args>(__args)...);
+	}
+
+	template<typename To, typename From>
+	Ref<To> static_ref_cast(const Ref<From>& from)
+	{
+		if (!from)
+			return nullptr;
+
+		return Ref<To>((RefControlBlock<To>*)from.m_ControlBlock);
+	}
+
+	template<typename To, typename From>
+	Ref<To> dynamic_ref_cast(const Ref<From>& from)
+	{
+		if (!from)
+			return nullptr;
+
+		using FromPtr = decltype(from.ptr());
+
+		To* casted_ptr = dynamic_cast<To*>(const_cast<std::remove_const_t<std::remove_pointer_t<FromPtr>>*>(from.ptr()));
+		if (!casted_ptr)
+			return nullptr;
+		return Ref<To>((RefControlBlock<To>*)from.m_ControlBlock);
+	}
+
+	template<typename T>
+	class WeakRef {
+	public:
+		using ControlBlock = RefControlBlock<T>;
+
+		WeakRef(void) = default;
+		~WeakRef(void) { this->release(); }
+
+		WeakRef(nullptr_t) {}
+		WeakRef& operator=(nullptr_t)
+		{
+			this->release();
+			return *this;
+		}
+
+		explicit WeakRef(ControlBlock* cb) : m_ControlBlock(cb)
+		{
+			if (m_ControlBlock)
+				m_ControlBlock->inc_weak_count();
+		}
+
+		WeakRef(const WeakRef& other)
+		: WeakRef(other.m_ControlBlock)
+		{}
+
+		WeakRef& operator=(const WeakRef& other)
+		{
+			if (m_ControlBlock == other.m_ControlBlock)
+				return *this;
+
+			this->release();
+			if (other)
+			{
+				m_ControlBlock = other.m_ControlBlock;
+				m_ControlBlock->inc_weak_count();
+			}
+			return *this;
+		}
+
+		WeakRef(WeakRef&& other) noexcept
+		: m_ControlBlock(std::exchange(other.m_ControlBlock, nullptr))
+		{}
+
+		WeakRef& operator=(WeakRef&& other) noexcept
+		{
+			if (m_ControlBlock == other.m_ControlBlock)
+				return *this;
+
+			this->release();
+			if (other)
+				m_ControlBlock = std::exchange(other.m_ControlBlock, nullptr);
+
+			return *this;
+		}
+
+		WeakRef(const Ref<T>& ref)
+		: WeakRef(ref.m_ControlBlock)
+		{}
+
+		WeakRef& operator=(const Ref<T>& ref)
+		{
+			if (m_ControlBlock == ref.m_ControlBlock)
+				return *this;
+
+			this->release();
+			if ((m_ControlBlock = ref.m_ControlBlock))
+				m_ControlBlock->inc_weak_count();
+
+			return *this;
+		}
+
+		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
+		WeakRef(const Ref<U>& ref)
+		: WeakRef((const Ref<T>&)ref)
+		{}
+
+		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
+		WeakRef& operator=(const Ref<U>& ref)
+		{
+			return this->operator=((const Ref<T>&)ref);
+		}
+
+		void release(void)
+		{
+			if (this->expired())
+				return;
+
+			m_ControlBlock->dec_weak_count();
+			if (!m_ControlBlock->weak_count && !m_ControlBlock->strong_count)
+				delete m_ControlBlock;
+
+			m_ControlBlock = nullptr;
+		}
+
+		[[nodiscard]] Ref<T> lock(void) const
+		{
+			return m_ControlBlock->strong_count.load() ? Ref<T>(m_ControlBlock) : nullptr;
+		}
+
+		template<typename U, std::enable_if_t<std::is_base_of_v<U, T>, int> = 0>
+		[[nodiscard]] operator WeakRef<U>(void) const
+		{
+			return WeakRef<U>((typename WeakRef<U>::ControlBlock*)this->m_ControlBlock);
+		}
+
+		[[nodiscard]] inline bool expired(void) const { return !m_ControlBlock || !m_ControlBlock->strong_count.load(); }
+
+		[[nodiscard]] inline u64 strong_count(void) const { return m_ControlBlock->strong_count.load(); }
+		[[nodiscard]] inline u64 weak_count(void) const { return m_ControlBlock->weak_count.load(); }
+
+		[[nodiscard]] inline operator bool(void) const { return m_ControlBlock;  }
+	private:
+		template<typename To, typename From>
+		friend WeakRef<To> static_ref_cast(const WeakRef<From>& from);
+
+		template<typename To, typename From>
+		friend WeakRef<To> dynamic_ref_cast(const WeakRef<From>& from);
+
+		ControlBlock* m_ControlBlock = nullptr;
+	};
+
+	template<typename T>
+	using ConstWeakRef = WeakRef<const T>;
+
+	template<typename To, typename From>
+	WeakRef<To> static_ref_cast(const WeakRef<From>& from)
+	{
+		if (!from)
+			return nullptr;
+
+		return WeakRef<To>((RefControlBlock<To>*)from.m_ControlBlock);
+	}
+
+	template<typename To, typename From>
+	WeakRef<To> dynamic_ref_cast(const WeakRef<From>& from)
+	{
+		if (!from)
+			return nullptr;
+
+		Ref<From> locked = from.lock();
+		if (!locked)
+			return nullptr;
+
+		using FromPtr = decltype(locked.ptr());
+
+		To* casted_ptr = dynamic_cast<To*>(const_cast<std::remove_const_t<std::remove_pointer_t<FromPtr>>*>(locked.ptr()));
+		if (!casted_ptr)
+			return nullptr;
+
+		return WeakRef<To>((RefControlBlock<To>*)from.m_ControlBlock);
+	}
+
+	template<typename T>
+	class ViewRef {
+	public:
+		ViewRef(void) = default;
+		~ViewRef(void) = default;
+
+		ViewRef(nullptr_t) {}
+		ViewRef& operator=(nullptr_t)
+		{
+			this->destroy();
+			return *this;
+		}
+
+		ViewRef(T* ptr) : m_Ptr(ptr) {}
+		ViewRef& operator=(T* ptr)
+		{
+			m_Ptr = ptr;
+			return *this;
+		}
+
+		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
+		ViewRef(const UniqueRef<U>& ref)
+		: m_Ptr((T*)ref.ptr())
+		{}
+
+		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
+		ViewRef(const Ref<U>& ref)
+		: m_Ptr(ref ? (T*)ref.ptr() : nullptr)
+		{}
+
+		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
+		ViewRef(const WeakRef<U>& ref)
+		: m_Ptr(ref ? (T*)ref.lock().ptr() : nullptr)
+		{}
+
+		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
+		ViewRef& operator=(const UniqueRef<U>& ref)
+		{
+			m_Ptr = (T*)ref.ptr();
+			return *this;
+		}
+
+		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
+		ViewRef& operator=(const Ref<U>& ref)
+		{
+			m_Ptr = ref ? (T*)ref.ptr() : nullptr;
+			return *this;
+		}
+
+		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
+		ViewRef& operator=(const WeakRef<U>& ref)
+		{
+			m_Ptr = ref ? (T*)ref.lock().ptr() : nullptr;
+			return *this;
+		}
+
+		ViewRef(const ViewRef& other) = default;
+		ViewRef& operator=(const ViewRef& other)
+		{
+			m_Ptr = other.m_Ptr;
+			return *this;
+		}
+
+		ViewRef(ViewRef&& other) noexcept
+		: m_Ptr(std::exchange(other.m_Ptr, nullptr))
+		{}
+
+		ViewRef& operator=(ViewRef&& other) noexcept
+		{
+			if (m_Ptr == other.m_Ptr)
+				return *this;
+
+			m_Ptr = std::exchange(other.m_Ptr, nullptr);
+			return *this;
+		}
+
+		void swap(ViewRef& other)
+		{
+			std::swap(m_Ptr, other.m_Ptr);
+		}
+
+		void destroy(void)
+		{
+			m_Ptr = nullptr;
+		}
+
+		T* release(void)
+		{
+			if (!m_Ptr)
+				return nullptr;
+
+			T* temp = m_Ptr;
+			m_Ptr = nullptr;
+			return temp;
+		}
+
+		template<typename U, std::enable_if_t<std::is_base_of_v<U, T>, int> = 0>
+		[[nodiscard]] inline operator ViewRef<U>(void) { return ViewRef<U>(m_Ptr); }
+
+		[[nodiscard]] inline T* ptr(void) { return m_Ptr; }
+		[[nodiscard]] inline const T* ptr(void) const { return m_Ptr; }
+
+		[[nodiscard]] inline T& operator*(void) { return *m_Ptr; }
+		[[nodiscard]] inline const T& operator*(void) const { return *m_Ptr; }
+
+		[[nodiscard]] inline T* operator->(void) { return m_Ptr; }
+		[[nodiscard]] inline const T* operator->(void) const { return m_Ptr; }
+
+		[[nodiscard]] inline auto operator<=>(const ViewRef& other) const { return m_Ptr <=> other.m_Ptr; }
+		[[nodiscard]] inline auto operator==(const ViewRef& other) const { return m_Ptr == other.m_Ptr; }
+
+		[[nodiscard]] inline operator bool(void) const { return m_Ptr; }
+	private:
+		template<typename To, typename From>
+		friend ViewRef<To> static_ref_cast(const ViewRef<From>& from);
+
+		template<typename To, typename From>
+		friend ViewRef<To> dynamic_ref_cast(const ViewRef<From>& from);
+
+		T* m_Ptr = nullptr;
+	};
+
+	template<typename T>
+	using ConstViewRef = ViewRef<const T>;
+
+	template<typename T>
+	using View = ViewRef<T>;
+
+	template<typename T>
+	using ConstView = View<const T>;
+
+	template<typename To, typename From>
+	ViewRef<To> static_ref_cast(const ViewRef<From>& from)
+	{
+		using FromPtr = decltype(from.ptr());
+		To* casted = (To*)const_cast<std::remove_const_t<std::remove_pointer_t<FromPtr>>*>(from.ptr());
+		return ViewRef<To>(casted);
+	}
+
+	template<typename To, typename From>
+	ViewRef<To> dynamic_ref_cast(const ViewRef<From>& from)
+	{
+		using FromPtr = decltype(from.ptr());
+		To* casted = dynamic_cast<To*>(const_cast<std::remove_const_t<std::remove_pointer_t<FromPtr>>*>(from.ptr()));
+		return ViewRef<To>(casted);
+	}
+} // namespace Na2
+
+#endif // NA2_REF_HPP
