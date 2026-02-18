@@ -53,6 +53,8 @@ namespace Na2::Platform::Desktop
 
 		static inline View<EventQueue> s_Instance = nullptr;
 	};
+
+	[[nodiscard]] bool IsGamepadPresent(JoystickID jid);
 } // namespace Na2::Platform::Desktop
 
 #endif // GLFW_EVENT_QUEUE_HPP

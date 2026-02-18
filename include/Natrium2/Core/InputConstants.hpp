@@ -89,6 +89,7 @@ namespace Na2
 	};
 
 	using JoystickID = u8;
+	inline constexpr JoystickID k_MaxJoysticks = 16;
 
 	enum class GamepadButton : u8 {
 		None = 0,

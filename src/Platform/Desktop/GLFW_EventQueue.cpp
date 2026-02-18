@@ -8,6 +8,12 @@
 
 namespace Na2::Platform::Desktop
 {
+	bool IsGamepadPresent(JoystickID _jid)
+	{
+		int jid = (int)_jid - 1;
+		return glfwJoystickPresent(jid) && glfwJoystickIsGamepad(jid);
+	}
+
 	ArrayList<GLFWgamepadstate> previousGamepadStates(16);
 
 	void EventQueue::destroy(void)
