@@ -33,10 +33,12 @@ namespace Na2
 	}
 
 	Context::Context(const ContextInitInfo& info)
-		: m_ExecPath(getExecPath()),
-		m_ExecDir(m_ExecPath.parent_path()),
-		m_ExecName(m_ExecPath.filename()),
-		m_Version("Pre-Alpha 2")
+	: m_ExecPath(getExecPath()),
+	  m_ExecDir(m_ExecPath.parent_path()),
+	  m_ExecName(m_ExecPath.filename()),
+	  m_Version("Pre-Alpha 2"),
+	  m_EngineAssetsDirectory(info.engine_assets_dir),
+	  m_ShaderOutputDirectory(info.shader_output_dir)
 	{
 		g_Logger.print_header();
 		g_Logger.printf(Info, "Initializing Natrium version {}", m_Version);
@@ -82,6 +84,12 @@ namespace Na2
 			}
 		});
 	#endif // NA2_USE_GLFW
+
+		if (!std::filesystem::exists(m_EngineAssetsDirectory))
+			std::filesystem::create_directories(m_EngineAssetsDirectory);
+
+		if (!std::filesystem::exists(m_ShaderOutputDirectory))
+			std::filesystem::create_directories(m_ShaderOutputDirectory);
 	}
 
 	void Context::destroy(void)
@@ -100,7 +108,9 @@ namespace Na2
 	: m_ExecPath(std::move(other.m_ExecPath)),
 	  m_ExecDir(std::move(other.m_ExecDir)),
 	  m_ExecName(std::move(other.m_ExecName)),
-	  m_Version(std::move(other.m_Version))
+	  m_Version(std::move(other.m_Version)),
+	  m_EngineAssetsDirectory(std::move(other.m_EngineAssetsDirectory)),
+	  m_ShaderOutputDirectory(std::move(other.m_ShaderOutputDirectory))
 	{
 		if (&other == Context::s_Context)
 			Context::s_Context = this;
@@ -115,6 +125,8 @@ namespace Na2
 		m_ExecDir = std::move(other.m_ExecDir);
 		m_ExecName = std::move(other.m_ExecName);
 		m_Version = std::move(other.m_Version);
+		m_EngineAssetsDirectory = std::move(other.m_EngineAssetsDirectory);
+		m_ShaderOutputDirectory = std::move(other.m_ShaderOutputDirectory);
 
 		if (&other == Context::s_Context)
 			Context::s_Context = this;
