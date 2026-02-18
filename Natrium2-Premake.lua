@@ -6,10 +6,9 @@ VulkanSdk = os.getenv("VULKAN_SDK")
 IncludeDirectories["vk"] = "%{VulkanSdk}/Include/"
 LibraryDirectories["vk"] = "%{VulkanSdk}/Lib/"
 
-include "dependencies/fmt-Premake.lua"
-
 group "Dependencies"
-
+    include "dependencies/fmt-Premake.lua"
+    include "dependencies/glfw-Premake.lua"
 group ""
 
 project "Natrium2"
@@ -33,13 +32,15 @@ project "Natrium2"
 
     includedirs {
         "%{IncludeDirectories.fmt}",
+        "%{IncludeDirectories.glfw}",
         "dependencies/",
         "include/",
         "src/"
     }
 
     links {
-        "fmt"
+        "%{Libraries.fmt}",
+        "%{Libraries.glfw}",
     }
 
     filter "system:linux"
@@ -47,7 +48,10 @@ project "Natrium2"
 
         }
 
-        defines { "NA2_PLATFORM_LINUX" }
+        defines {
+            "NA2_PLATFORM_LINUX",
+            "NA2_USE_GLFW"
+        }
 
     filter "system:windows"
         includedirs {
@@ -65,7 +69,10 @@ project "Natrium2"
             "ole32"
         }
 
-        defines { "NA2_PLATFORM_WINDOWS" }
+        defines {
+            "NA2_PLATFORM_WINDOWS",
+            "NA2_USE_GLFW"
+        }
 
         buildoptions { "/utf-8" }
 
