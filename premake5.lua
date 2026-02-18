@@ -9,4 +9,4 @@ workspace "Natrium"
 
     debugdir "%{wks.location}"
 
-include "natrium-cpp/Natrium2-Premake.lua"
+include "Natrium2-Premake.lua"

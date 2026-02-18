@@ -11,6 +11,8 @@ group "Dependencies"
     include "dependencies/glfw-Premake.lua"
 group ""
 
+IncludeDirectories["nlohmann_json"] = "dependencies/nlohmann_json/include/"
+
 project "Natrium2"
     location "./"
     targetname "%{prj.name}-bin"
@@ -33,6 +35,7 @@ project "Natrium2"
     includedirs {
         "%{IncludeDirectories.fmt}",
         "%{IncludeDirectories.glfw}",
+        "%{IncludeDirectories.nlohmann_json}",
         "dependencies/",
         "include/",
         "src/"

@@ -44,6 +44,8 @@
 #include <fmt/format.h>
 #include <fmt/chrono.h>
 
+#include <nlohmann/json.hpp>
+
 #include "Natrium2/Template/ArrayIterators.hpp"
 #include "Natrium2/Template/ArrayList.hpp"
 #include "Natrium2/Template/References.hpp"
