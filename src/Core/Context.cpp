@@ -11,8 +11,14 @@
 	#include <GLFW/glfw3.h>
 #endif // NA2_USE_GLFW
 
+#include "Natrium2/Core/EventQueue.hpp"
+
 namespace Na2
 {
+#ifdef NA2_USE_GLFW
+	namespace Platform::Desktop { extern ArrayList<GLFWgamepadstate> previousGamepadStates; }
+#endif // NA2_USE_GLFW
+
 	static std::filesystem::path getExecPath(void)
 	{
 #if defined(NA_PLATFORM_LINUX)
@@ -49,6 +55,32 @@ namespace Na2
 		NA2_ASSERT(result, "Failed to initialize glfw!");
 
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+
+		glfwSetJoystickCallback([](int jid, int event)
+		{
+			if (!glfwJoystickIsGamepad(jid))
+				return;
+
+			if (event == GLFW_CONNECTED)
+			{
+				EventQueue::Get()->add(Event{.gamepad_connected = {
+					EventType::GamepadConnected,
+					false,
+					nullptr,
+					(u8)(jid + 1)
+				}});
+			} else
+			if (event == GLFW_DISCONNECTED)
+			{
+				EventQueue::Get()->add(Event{.gamepad_disconnected = {
+					EventType::GamepadDisconnected,
+					false,
+					nullptr,
+					(u8)(jid + 1)
+				}});
+				Platform::Desktop::previousGamepadStates[jid] = {};
+			}
+		});
 	#endif // NA2_USE_GLFW
 	}
 
@@ -70,17 +102,23 @@ namespace Na2
 	  m_ExecName(std::move(other.m_ExecName)),
 	  m_Version(std::move(other.m_Version))
 	{
-		Context::s_Context = this;
+		if (&other == Context::s_Context)
+			Context::s_Context = this;
 	}
 
 	Context& Context::operator=(Context&& other) noexcept
 	{
+		if (this == &other)
+			return *this;
+
 		m_ExecPath = std::move(other.m_ExecPath);
 		m_ExecDir = std::move(other.m_ExecDir);
 		m_ExecName = std::move(other.m_ExecName);
 		m_Version = std::move(other.m_Version);
 
-		Context::s_Context = this;
+		if (&other == Context::s_Context)
+			Context::s_Context = this;
+
 		return *this;
 	}
 } // namespace Na
