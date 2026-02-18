@@ -6,7 +6,8 @@
 namespace Na2
 {
 	struct ContextInitInfo {
-
+		std::filesystem::path engine_assets_dir = "assets/natrium2";
+		std::filesystem::path shader_output_dir = "bin/shaders";
 	};
 
 	class Context {
@@ -34,9 +35,17 @@ namespace Na2
 		[[nodiscard]] inline const auto& exec_dir(void)  const { return m_ExecDir; }
 		[[nodiscard]] inline const auto& exec_name(void) const { return m_ExecName; }
 
+		[[nodiscard]] inline const auto& version(void) const { return m_Version; }
+
+		[[nodiscard]] inline const auto& engine_assets_directory(void) const { return m_EngineAssetsDirectory; }
+		[[nodiscard]] inline const auto& shader_output_directory(void) const { return m_ShaderOutputDirectory; }
+
 	private:
 		std::filesystem::path m_ExecPath, m_ExecDir, m_ExecName;
 		std::string_view m_Version;
+
+		std::filesystem::path m_EngineAssetsDirectory;
+		std::filesystem::path m_ShaderOutputDirectory;
 
 		static inline View<Context> s_Context = nullptr;
 	};
