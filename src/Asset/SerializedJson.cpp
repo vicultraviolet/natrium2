@@ -1,0 +1,60 @@
+#include "Pch.hpp"
+#include "Natrium2/Asset/SerializedJson.hpp"
+
+#include "Natrium2/Core/Logger.hpp"
+
+#if defined(NA2_PLATFORM_WINDOWS)
+	#define C_STR string().c_str
+#elif defined(NA2_PLATFORM_LINUX)
+	#define C_STR c_str
+#else
+	#define C_STR c_str
+#endif
+
+namespace Na2
+{
+	FileErrorCode SerializedJson::load(const std::filesystem::path& path)
+	{
+		if (!std::filesystem::exists(path))
+		{
+			return this->_handle_missing(path);
+		}
+
+		std::ifstream file(path);
+
+		if (!file)
+		{
+			return FileErrorCode::Unknown;
+		}
+
+		nlohmann::json json;
+
+		try
+		{
+			json = nlohmann::json::parse(file);
+		} catch (const nlohmann::json::parse_error& e)
+		{
+			g_Logger.printf(Error, "Failed to parse json file {}: {}", path.C_STR(), e.what());
+			return FileErrorCode::InvalidFormat;
+		}
+
+		this->deserialize(json);
+
+		return FileErrorCode::None;
+	}
+
+	FileErrorCode SerializedJson::save(const std::filesystem::path& path)
+	{
+		std::ofstream file(path, std::ios::trunc);
+		if (!file)
+		{
+			g_Logger.printf(Error, "Failed to save json: {}", path.C_STR());
+			return FileErrorCode::Unknown;
+		}
+
+		file << this->serialize().dump(4);
+		file.close();
+
+		return FileErrorCode::None;
+	}
+} // namespace Na2
