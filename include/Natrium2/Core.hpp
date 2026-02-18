@@ -90,38 +90,6 @@ namespace Na2
     } // namespace Primitives
     using namespace Primitives;
 
-    enum class BuildConfig : u8 {
-        None = 0, Debug, Release, Distribution
-    };
-
-#if defined(NA2_CONFIG_DEBUG)
-    constexpr BuildConfig k_BuildConfig = BuildConfig::Debug;
-#elif defined(NA2_CONFIG_RELEASE)
-    constexpr BuildConfig k_BuildConfig = BuildConfig::Release;
-#elif defined(NA2_CONFIG_DIST)
-    constexpr BuildConfig k_BuildConfig = BuildConfig::Distribution;
-#else
-    constexpr BuildConfig k_BuildConfig = BuildConfig::None;
-#endif // NA2_CONFIG
-
-    enum class Platform : u8 {
-        None = 0, Windows, Linux
-    };
-
-#if defined(NA2_PLATFORM_WINDOWS)
-    constexpr Platform k_Platform = Platform::Windows;
-#elif defined(NA2_PLATFORM_LINUX)
-    constexpr Platform k_Platform = Platform::Linux;
-#else
-    constexpr Platform k_Platform = Platform::None;
-#endif // NA2_PLATFORM
-
-#if defined(NA_PLATFORM_WINDOWS) && defined(NA_CONFIG_DIST)
-    constexpr bool k_WindowedApp = true;
-#else
-    constexpr bool k_WindowedApp = false;
-#endif
-
     template<const std::string_view& t_Str1 = "", const std::string_view& t_Str2 = "">
     class StringViewCat {
     private:
