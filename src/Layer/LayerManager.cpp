@@ -48,7 +48,7 @@ namespace Na2
 			return;
 		}
 
-		m_Layers.resize(m_Layers.size() - 1);
+		m_Layers.set_size(m_Layers.size() - 1);
 		for (; i < m_Layers.size(); i++)
 			m_Layers[i] = std::move(m_Layers[i + 1]);
 	}
@@ -60,7 +60,7 @@ namespace Na2
 			m_Layers[i]->on_detach();
 			m_Layers[i].~Ref();
 		}
-		m_Layers.resize(0);
+		m_Layers.set_size(0);
 	}
 
 	void LayerManager::set_layer_priority(Ref<Layer> layer, i64 new_priority)

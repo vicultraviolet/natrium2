@@ -46,7 +46,7 @@ namespace Na2::Platform::Desktop
 
 	EventQueue& EventQueue::poll(void)
 	{
-		m_Events.clear();
+		m_Events.set_size(0);
 		glfwPollEvents();
 
 		for (int jid = GLFW_JOYSTICK_1; jid <= GLFW_JOYSTICK_16; jid++)

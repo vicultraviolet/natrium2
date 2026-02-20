@@ -152,10 +152,10 @@ namespace Na2
 			return *this;
 		}
 
-		void resize(u64 new_size)
+		void set_size(u64 size)
 		{
-			NA2_ASSERT(m_Capacity >= new_size, "Failed to resize ArrayList: specified size is bigger than capacity!");
-			m_Size = new_size;
+			NA2_ASSERT(m_Capacity >= size, "Failed to resize ArrayList: specified size is bigger than capacity!");
+			m_Size = size;
 		}
 
 		void reallocate(u64 new_capacity)
@@ -188,7 +188,7 @@ namespace Na2
 		void reallocate(u64 new_capacity, u64 new_size)
 		{
 			this->reallocate(new_capacity);
-			this->resize(new_size);
+			this->set_size(new_size);
 		}
 
 		template<typename... t_Args>
