@@ -33,7 +33,7 @@ namespace Na2
 #endif // NA_PLATFORM
 	}
 
-	Context::Context(const ContextInitInfo& info)
+	Context::Context(const ContextCreateInfo& info)
 	: m_ExecPath(getExecPath()),
 	  m_ExecDir(m_ExecPath.parent_path()),
 	  m_ExecName(m_ExecPath.filename()),

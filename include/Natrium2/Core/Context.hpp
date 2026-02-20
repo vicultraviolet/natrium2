@@ -5,7 +5,7 @@
 
 namespace Na2
 {
-	struct ContextInitInfo {
+	struct ContextCreateInfo {
 		std::filesystem::path engine_assets_dir = "assets/natrium2";
 		std::filesystem::path shader_output_dir = "bin/shaders";
 	};
@@ -14,7 +14,7 @@ namespace Na2
 	public:
 		Context(void) = default;
 
-		explicit Context(const ContextInitInfo& info);
+		explicit Context(const ContextCreateInfo& info);
 		~Context(void) { this->destroy(); }
 
 		void destroy(void);
