@@ -24,6 +24,7 @@ namespace Na2
 		virtual void on_detach(void) {}
 
 		virtual void on_event(Event& e) {}
+		virtual void on_tick(void) {}
 		virtual void on_update(f64 dt) {}
 		virtual void on_draw(void) {}
 		virtual void on_imgui_draw(void) {}
