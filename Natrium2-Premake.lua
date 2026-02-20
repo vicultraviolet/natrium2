@@ -52,7 +52,7 @@ project "Natrium2"
 
     filter "system:linux"
         links {
-
+            "vulkan",
         }
 
         defines {
@@ -62,15 +62,16 @@ project "Natrium2"
 
     filter "system:windows"
         includedirs {
-
+            "%{IncludeDirectories.vk}",
         }
 
         libdirs {
-
+            "%{LibraryDirectories.vk}",
         }
 
         links {
-            "winmm",
+            "vulkan-1",
+            "winmm",            
             "avrt",
             "user32",
             "ole32"

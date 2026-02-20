@@ -50,6 +50,9 @@
 
 #include <glm/glm.hpp>
 
+#define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
+#include <vulkan/vulkan_raii.hpp>
+
 #include "Natrium2/Template/ArrayIterators.hpp"
 #include "Natrium2/Template/ArrayList.hpp"
 #include "Natrium2/Template/References.hpp"
