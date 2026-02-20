@@ -1,13 +1,12 @@
 #include "Pch.hpp"
 #include "Natrium2/Chrono/TimeKeeper.hpp"
 
-namespace Na2
+namespace Na2::Chrono
 {
     TimeKeeper::TimeKeeper(f64 target_fps)
     : m_FrameDuration(1.0 / target_fps),
       m_PreviousTime(std::chrono::steady_clock::now())
     {}
-
 
     f64 TimeKeeper::tick(void)
     {
@@ -25,23 +24,18 @@ namespace Na2
         auto now = steady_clock::now();
 
         if (next_frame_time <= now)
-            return; 
+            return;
 
         auto remainder = duration_cast<microseconds>(next_frame_time - now);
-        if (remainder < 2ms)
+        if (remainder < 3ms)
         {
             while (steady_clock::now() < next_frame_time)
-            {
-                //std::this_thread::yield();
-            }
+                std::this_thread::yield();
         } else
         {
-            auto sleep_until = next_frame_time - 1ms;
+            auto sleep_until = next_frame_time - 2ms;
             std::this_thread::sleep_until(sleep_until);
-            while (steady_clock::now() < next_frame_time)
-            {
-                // spin
-            }
+            while (steady_clock::now() < next_frame_time);
         }
     }
 
@@ -49,4 +43,4 @@ namespace Na2
     {
         m_FrameDuration = std::chrono::duration<f64>(1.0 / target_fps);
     }
-} // namespace Na2
+} // namespace Na2::Chrono

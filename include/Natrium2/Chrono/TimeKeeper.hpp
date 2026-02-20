@@ -3,7 +3,7 @@
 
 #include "Natrium2/Core.hpp"
 
-namespace Na2
+namespace Na2::Chrono
 {
     class TimeKeeper {
     public:
@@ -19,8 +19,8 @@ namespace Na2
     private:
         std::chrono::duration<f64> m_FrameDuration;   
         std::chrono::steady_clock::time_point m_PreviousTime;
-        f64 m_DeltaTime;
+        f64 m_DeltaTime = 0.0;
     };
-} // namespace Na2
+} // namespace Na2::Chrono
 
 #endif // NA2_CHRONO_TIME_KEEPER_HPP

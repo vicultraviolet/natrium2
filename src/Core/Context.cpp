@@ -4,7 +4,8 @@
 #include "Natrium2/Core/Logger.hpp"
 
 #ifdef NA2_PLATFORM_WINDOWS
-	#include <Windows.h>
+	#include <windows.h>
+	#include <mmsystem.h>
 #endif // NA_PLATFORM_WINDOWS
 
 #ifdef NA2_USE_GLFW
@@ -90,11 +91,20 @@ namespace Na2
 
 		if (!std::filesystem::exists(m_ShaderOutputDirectory))
 			std::filesystem::create_directories(m_ShaderOutputDirectory);
+
+	#ifdef NA2_PLATFORM_WINDOWS
+		timeBeginPeriod(1);
+	#endif // NA2_PLATFORM_WINDOWS
+		
 	}
 
 	void Context::destroy(void)
 	{
 		g_Logger.print(Info, "Shutting down Natrium, Goodbye!");
+
+	#ifdef NA2_PLATFORM_WINDOWS
+		timeEndPeriod(1);
+	#endif // NA2_PLATFORM_WINDOWS
 
 	#ifdef NA2_USE_GLFW
 		glfwTerminate();
