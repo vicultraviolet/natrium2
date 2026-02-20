@@ -20,9 +20,6 @@ namespace Na2::Graphics
 
 	struct ContextCreateInfo {
 		DeviceExtensions extensions;
-
-		// if null, temporary window will be created, as it's needed for initialization
-		View<Window> window = nullptr;
 	};
 
 	class Context {

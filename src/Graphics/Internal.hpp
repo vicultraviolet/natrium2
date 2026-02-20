@@ -24,10 +24,10 @@ namespace Na2::Graphics
 		u32 m_Graphics = u32max, m_Compute = u32max;
 	};
 
-	class SurfaceSupport {
+	class SurfaceDeviceInfo {
 	public:
-		SurfaceSupport(void) = default;
-		SurfaceSupport(vk::raii::PhysicalDevice, const vk::raii::SurfaceKHR&);
+		SurfaceDeviceInfo(void) = default;
+		SurfaceDeviceInfo(vk::raii::PhysicalDevice, const vk::raii::SurfaceKHR&);
 
 		[[nodiscard]] inline vk::SurfaceCapabilitiesKHR capabilities(void) const { return m_Capabilities; }
 		[[nodiscard]] inline const ArrayList<vk::SurfaceFormatKHR>& formats(void) const { return m_Formats; }

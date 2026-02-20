@@ -21,14 +21,15 @@ namespace Na2::Graphics
 
 	static i32 ratePhysicalDevice(
 		vk::raii::PhysicalDevice device,
-		const vk::raii::SurfaceKHR& surface,
 		const ArrayList<const char*>& extensions
 	);
 
-	static bool areRequiredExtensionsSupported(
+	static bool requiredExtensionsSupported(
 		vk::raii::PhysicalDevice device,
 		const ArrayList<const char*>& extensions
 	);
+
+	static bool queueFamiliesSupported(vk::raii::PhysicalDevice device);
 
 	Context::Context(ContextCreateInfo&& info)
 	: m_DeviceExtensions(std::move(info.extensions))
@@ -92,21 +93,10 @@ namespace Na2::Graphics
 			m_VkDeviceExtensions.emplace(vk::KHRMaintenance1ExtensionName);
 		}
 
-		Window temp_window;
-		vk::raii::SurfaceKHR surface = nullptr;
-		if (info.window)
-		{
-			surface = CreateSurface(m_Instance, *info.window);
-		} else
-		{
-			temp_window = Window(1, 1, "TEMPORARY");
-			surface = CreateSurface(m_Instance, temp_window);
-		}
-
-		i32 high_score = 0;
+		i32 high_score = -1;
 		for (const auto& device : m_Instance.enumeratePhysicalDevices())
 		{
-			i32 score = ratePhysicalDevice(device, surface, m_VkDeviceExtensions);
+			i32 score = ratePhysicalDevice(device, m_VkDeviceExtensions);
 			if (score > high_score)
 			{
 				high_score = score;
@@ -195,7 +185,6 @@ namespace Na2::Graphics
 
 	static i32 ratePhysicalDevice(
 		vk::raii::PhysicalDevice device,
-		const vk::raii::SurfaceKHR& surface,
 		const ArrayList<const char*>& extensions
 	)
 	{
@@ -206,21 +195,16 @@ namespace Na2::Graphics
 		auto features = device.getFeatures();
 
 		if (!features.geometryShader)
-			return -1;
+			return 0;
+
+		if (!queueFamiliesSupported(device))
+			return 0;
 
 		if (!features.samplerAnisotropy)
-			return -1;
+			return 0;
 
-		QueueFamilyIndices queue_indices(device, surface);
-
-		if (!queue_indices)
-			return -1;
-
-		if (!areRequiredExtensionsSupported(device, extensions))
-			return -1;
-
-		if (!SurfaceSupport(device, surface))
-			return -1;
+		if (!requiredExtensionsSupported(device, extensions))
+			return 0;
 
 		if (properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu)
 			properties.limits.maxImageDimension2D += 1000;
@@ -228,7 +212,7 @@ namespace Na2::Graphics
 		return properties.limits.maxImageDimension2D;
 	}
 
-	static bool areRequiredExtensionsSupported(
+	static bool requiredExtensionsSupported(
 		vk::raii::PhysicalDevice device,
 		const ArrayList<const char*>& extensions
 	)
@@ -240,5 +224,25 @@ namespace Na2::Graphics
 			required_extensions.erase(extension.extensionName);
 
 		return required_extensions.empty();
+	}
+
+	static bool queueFamiliesSupported(vk::raii::PhysicalDevice device)
+	{
+		bool graphics = false, compute = false;
+
+		auto families = device.getQueueFamilyProperties();
+		for (const auto& family : families)
+		{
+			if (family.queueFlags & vk::QueueFlagBits::eGraphics)
+				graphics = true;
+
+			if (family.queueFlags & vk::QueueFlagBits::eCompute)
+				compute = true;
+
+			if (graphics && compute)
+				return true;
+		}
+
+		return graphics && compute;
 	}
 } // namespace Na2::Graphics

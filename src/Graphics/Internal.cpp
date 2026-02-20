@@ -43,7 +43,7 @@ namespace Na2::Graphics
 		}
 	}
 
-	SurfaceSupport::SurfaceSupport(
+	SurfaceDeviceInfo::SurfaceDeviceInfo(
 		vk::raii::PhysicalDevice _device,
 		const vk::raii::SurfaceKHR& surface
 	)
