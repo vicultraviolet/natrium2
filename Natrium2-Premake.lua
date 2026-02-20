@@ -13,6 +13,7 @@ group ""
 
 IncludeDirectories["nlohmann_json"] = "dependencies/nlohmann_json/include/"
 IncludeDirectories["stduuid"] = "dependencies/stduuid/include/"
+IncludeDirectories["glm"] = "dependencies/glm/"
 
 project "Natrium2"
     location "./"
@@ -38,6 +39,7 @@ project "Natrium2"
         "%{IncludeDirectories.glfw}",
         "%{IncludeDirectories.nlohmann_json}",
         "%{IncludeDirectories.stduuid}",
+        "%{IncludeDirectories.glm}",
         "dependencies/",
         "include/",
         "src/"

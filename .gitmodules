@@ -10,3 +10,6 @@
 [submodule "dependencies/stduuid"]
 	path = dependencies/stduuid
 	url = https://github.com/mariusbancila/stduuid.git
+[submodule "dependencies/glm"]
+	path = dependencies/glm
+	url = https://github.com/g-truc/glm.git

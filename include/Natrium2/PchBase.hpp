@@ -48,6 +48,8 @@
 
 #include <uuid.h>
 
+#include <glm/glm.hpp>
+
 #include "Natrium2/Template/ArrayIterators.hpp"
 #include "Natrium2/Template/ArrayList.hpp"
 #include "Natrium2/Template/References.hpp"
