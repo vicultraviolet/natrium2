@@ -6,12 +6,10 @@
 
 namespace Na2
 {
+	using MousePosition = glm::vec2;
+
 	class Input {
 	public:
-		struct MousePos {
-			f32 x, y;
-		};
-
 		Input(void) { this->reset(); }
 		~Input(void) = default;
 
@@ -21,12 +19,13 @@ namespace Na2
 		[[nodiscard]] inline bool key(Key key) const { return m_Keys.test((u64)key); }
 		[[nodiscard]] inline bool mouse_button(MouseButton button) const { return m_MouseButtons.test((u64)button); }
 
-		[[nodiscard]] inline float mouse_x(void) const { return m_MousePos.x; }
-		[[nodiscard]] inline float mouse_y(void) const { return m_MousePos.y; }
+		[[nodiscard]] inline auto mouse_pos(void) const { return m_MousePos; }
+		[[nodiscard]] inline f32  mouse_x(void) const { return m_MousePos.x; }
+		[[nodiscard]] inline f32  mouse_y(void) const { return m_MousePos.y; }
 
 		[[nodiscard]] inline bool gamepad_connected(JoystickID jid) const { return m_Gamepads.test(jid); }
 		[[nodiscard]] inline bool gamepad_button(JoystickID jid, GamepadButton button) const { return m_GamepadButtons.test(this->_GamepadButtonIndex(jid, button)); }
-		[[nodiscard]] inline float gamepad_axis(JoystickID jid, GamepadAxis axis) const { return m_GamepadAxes[this->_GamepadAxisIndex(jid, axis)]; }
+		[[nodiscard]] inline f32 gamepad_axis(JoystickID jid, GamepadAxis axis) const { return m_GamepadAxes[this->_GamepadAxisIndex(jid, axis)]; }
 	private:
 		[[nodiscard]] static constexpr inline u64 _GamepadButtonIndex(JoystickID jid, GamepadButton button) { return (u64)jid * ((u64)GamepadButton::Last + 1) + (u64)button; }
 		[[nodiscard]] static constexpr inline u64 _GamepadAxisIndex(JoystickID jid, GamepadAxis axis) { return (u64)jid * ((u64)GamepadAxis::Last + 1) + (u64)axis; }
@@ -34,7 +33,7 @@ namespace Na2
 		std::bitset<(u64)Key::Last + 1> m_Keys;
 
 		std::bitset<(u64)MouseButton::Last + 1> m_MouseButtons;
-		MousePos m_MousePos;
+		MousePosition m_MousePos;
 
 		std::bitset<(u64)k_MaxJoysticks + 1> m_Gamepads;
 		std::bitset<((u64)GamepadButton::Last + 1) * ((u64)k_MaxJoysticks + 1)> m_GamepadButtons;
