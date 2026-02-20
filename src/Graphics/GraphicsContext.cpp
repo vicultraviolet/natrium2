@@ -1,6 +1,8 @@
 #include "Pch.hpp"
 #include "Natrium2/Graphics/GraphicsContext.hpp"
 
+#include "./Internal.hpp"
+
 #ifdef NA2_USE_GLFW
 	#include <GLFW/glfw3.h>
 #endif // NA2_USE_GLFW
@@ -8,6 +10,7 @@
 namespace Na2::Graphics
 {
 	static bool validationLayersSupported(const ArrayList<const char*>& requested_layers);
+
 	static vk::DebugUtilsMessengerCreateInfoEXT debugMessengerInfo(void);
 	static vk::Bool32 VKAPI_CALL debugCallback(
 		vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
@@ -16,27 +19,39 @@ namespace Na2::Graphics
 		void* user_data
 	);
 
-	Context::Context(const ContextCreateInfo& createInfo)
+	static i32 ratePhysicalDevice(
+		vk::raii::PhysicalDevice device,
+		const vk::raii::SurfaceKHR& surface,
+		const ArrayList<const char*>& extensions
+	);
+
+	static bool areRequiredExtensionsSupported(
+		vk::raii::PhysicalDevice device,
+		const ArrayList<const char*>& extensions
+	);
+
+	Context::Context(ContextCreateInfo&& info)
+	: m_DeviceExtensions(std::move(info.extensions))
 	{
-	#ifdef NA2_VK_VALIDATION_LAYERS
+#ifdef NA2_VK_VALIDATION_LAYERS
 		const ArrayList<const char*>& validation_layers = {
 			"VK_LAYER_KHRONOS_validation"
 		};
 
 		if (!validationLayersSupported(validation_layers))
 			throw std::runtime_error("Validation layers requested, but not supported!");
-	#endif // NA2_VK_VALIDATION_LAYERS
+#endif // NA2_VK_VALIDATION_LAYERS
 
 		vk::ApplicationInfo app_info
 		{
 			.pApplicationName = "",
-			.applicationVersion = VK_MAKE_VERSION(1, 0, 0),
+			.applicationVersion = vk::makeApiVersion(0, 1, 0, 0),
 			.pEngineName = "Natrium2",
-			.engineVersion = VK_MAKE_VERSION(1, 0, 0),
+			.engineVersion = vk::makeApiVersion(0, 1, 0, 0),
 			.apiVersion = vk::ApiVersion12
 		};
 
-	#ifdef NA2_USE_GLFW
+#ifdef NA2_USE_GLFW
 		u32 glfw_extension_count = 0;
 		const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
 
@@ -44,21 +59,21 @@ namespace Na2::Graphics
 
 		for (u32 i = 0; i < glfw_extension_count; i++)
 			instance_extensions.emplace(glfw_extensions[i]);
-	#else 
+#else 
 		ArrayList<const char*> instance_extensions(1);
-	#endif // NA2_USE_GLFW
+#endif // NA2_USE_GLFW
 
 		vk::InstanceCreateInfo instance_info;
 
-	#ifdef NA2_VK_VALIDATION_LAYERS
+#ifdef NA2_VK_VALIDATION_LAYERS
 		auto debug_messenger_info = debugMessengerInfo();
 		instance_info.pNext = &debug_messenger_info;
 
 		instance_info.enabledLayerCount = (u32)validation_layers.size();
 		instance_info.ppEnabledLayerNames = validation_layers.ptr();
-
-		instance_extensions.emplace(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-	#endif // NA2_VK_VALIDATION_LAYERS
+		
+		instance_extensions.emplace(vk::EXTDebugUtilsExtensionName);
+#endif // NA2_VK_VALIDATION_LAYERS
 
 		instance_info.pApplicationInfo = &app_info;
 
@@ -67,9 +82,37 @@ namespace Na2::Graphics
 
 		m_Instance = vk::raii::Instance(m_Context, instance_info);
 
-	#ifdef NA2_VK_VALIDATION_LAYERS
+#ifdef NA2_VK_VALIDATION_LAYERS
 		m_DebugMessenger = vk::raii::DebugUtilsMessengerEXT(m_Instance, debug_messenger_info);
-	#endif // NA2_VK_VALIDATION_LAYERS
+#endif // NA2_VK_VALIDATION_LAYERS
+
+		if (m_DeviceExtensions.contains(DeviceExtension::Swapchain))
+		{
+			m_VkDeviceExtensions.emplace(vk::KHRSwapchainExtensionName);
+			m_VkDeviceExtensions.emplace(vk::KHRMaintenance1ExtensionName);
+		}
+
+		Window temp_window;
+		vk::raii::SurfaceKHR surface = nullptr;
+		if (info.window)
+		{
+			surface = CreateSurface(m_Instance, *info.window);
+		} else
+		{
+			temp_window = Window(1, 1, "TEMPORARY");
+			surface = CreateSurface(m_Instance, temp_window);
+		}
+
+		i32 high_score = 0;
+		for (const auto& device : m_Instance.enumeratePhysicalDevices())
+		{
+			i32 score = ratePhysicalDevice(device, surface, m_VkDeviceExtensions);
+			if (score > high_score)
+			{
+				high_score = score;
+				m_PhysicalDevice = device;
+			}
+		}
 	}
 
 	static bool validationLayersSupported(const ArrayList<const char*>& requested_layers)
@@ -128,11 +171,11 @@ namespace Na2::Graphics
 		if (severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eError)
 		{
 			g_Logger.print(Error, data->pMessage);
-	#if defined(_MSC_VER)
+		#if defined(_MSC_VER)
 			__debugbreak();
-	#elif defined(__GNUC__) || defined(__clang__)
+		#elif defined(__GNUC__) || defined(__clang__)
 			__builtin_trap();
-	#endif
+		#endif
 		} else
 		if (severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning)
 		{
@@ -148,5 +191,54 @@ namespace Na2::Graphics
 	#endif // NA2_VK_VALIDATION_LAYERS
 
 		return vk::False;
+	}
+
+	static i32 ratePhysicalDevice(
+		vk::raii::PhysicalDevice device,
+		const vk::raii::SurfaceKHR& surface,
+		const ArrayList<const char*>& extensions
+	)
+	{
+		if (!*device)
+			return -1;
+
+		auto properties = device.getProperties();
+		auto features = device.getFeatures();
+
+		if (!features.geometryShader)
+			return -1;
+
+		if (!features.samplerAnisotropy)
+			return -1;
+
+		QueueFamilyIndices queue_indices(device, surface);
+
+		if (!queue_indices)
+			return -1;
+
+		if (!areRequiredExtensionsSupported(device, extensions))
+			return -1;
+
+		if (!SurfaceSupport(device, surface))
+			return -1;
+
+		if (properties.deviceType == vk::PhysicalDeviceType::eDiscreteGpu)
+			properties.limits.maxImageDimension2D += 1000;
+
+		return properties.limits.maxImageDimension2D;
+	}
+
+	static bool areRequiredExtensionsSupported(
+		vk::raii::PhysicalDevice device,
+		const ArrayList<const char*>& extensions
+	)
+	{
+		auto available_extensions = device.enumerateDeviceExtensionProperties();
+		std::set<std::string_view> required_extensions(extensions.begin(), extensions.end());
+
+		for (const auto& extension : available_extensions)
+			required_extensions.erase(extension.extensionName);
+
+		return required_extensions.empty();
 	}
 } // namespace Na2::Graphics
