@@ -1,5 +1,5 @@
-#ifndef NA2_TIME_KEEPER_HPP
-#define NA2_TIME_KEEPER_HPP
+#ifndef NA2_CHRONO_TIME_KEEPER_HPP
+#define NA2_CHRONO_TIME_KEEPER_HPP
 
 #include "Natrium2/Core.hpp"
 
@@ -23,4 +23,4 @@ namespace Na2
     };
 } // namespace Na2
 
-#endif // NA2_TIME_KEEPER_HPP
+#endif // NA2_CHRONO_TIME_KEEPER_HPP
