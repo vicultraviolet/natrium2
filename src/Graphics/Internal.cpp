@@ -7,7 +7,7 @@
 
 namespace Na2::Graphics
 {
-	vk::raii::SurfaceKHR CreateSurface(const vk::raii::Instance& instance, Window& window)
+	vk::raii::SurfaceKHR CreateSurface(const vk::raii::Instance& instance, const Window& window)
 	{
 		VkSurfaceKHR surface = nullptr;
 	#ifdef NA2_USE_GLFW
@@ -20,36 +20,69 @@ namespace Na2::Graphics
 		return vk::raii::SurfaceKHR(instance, surface);
 	}
 
-	QueueFamilyIndices::QueueFamilyIndices(
-		vk::raii::PhysicalDevice device,
-		const vk::raii::SurfaceKHR& surface
-	)
+	[[nodiscard]] static u32 countFlags(vk::QueueFlags flags)
 	{
-		auto properties = device.getQueueFamilyProperties();
+		return (u32)std::bitset<32>((u32)flags).count();
+	}
 
-		for (u32 i = 0; const auto& property : properties)
+	u32 FindFirstQueueFamily(QueueFamilyFindInfo&& info)
+	{
+		for (u32 i = 0; const auto& family : info.device.getQueueFamilyProperties())
 		{
-			if (property.queueFlags & vk::QueueFlagBits::eGraphics)
-				if (device.getSurfaceSupportKHR(i, surface))
-					m_Graphics = i;
+			if (info.present && !info.device.getSurfaceSupportKHR(i, info.surface))
+				continue;
 
-			if (property.queueFlags & vk::QueueFlagBits::eCompute)
-				m_Compute = i;
-
-			if (*this)
-				break;
+			if (family.queueFlags & info.desired_flags)
+				return i;
 
 			i++;
 		}
+
+		return u32max;
 	}
 
-	SurfaceDeviceInfo::SurfaceDeviceInfo(
-		vk::raii::PhysicalDevice _device,
-		const vk::raii::SurfaceKHR& surface
-	)
+	u32 FindBestQueueFamily(QueueFamilyFindInfo&& info)
 	{
-		vk::PhysicalDevice device = _device;
+		u32 best_index = u32max,
+			min_extra_flags = u32max;
 
+		for (u32 i = 0; const auto& family : info.device.getQueueFamilyProperties())
+		{
+			vk::QueueFlags flags = family.queueFlags;
+
+			if ((flags & info.desired_flags) == info.desired_flags)
+			{
+				vk::QueueFlags extra_flags = flags & ~info.desired_flags & info.undesired_flags;
+				u32 extra_count = countFlags(extra_flags);
+
+				if (info.present)
+				{
+					if (!info.device.getSurfaceSupportKHR(i, info.surface))
+						continue;
+				} else
+				{
+					if (info.surface && info.device.getSurfaceSupportKHR(i, info.surface))
+						extra_count++;
+				}
+
+				if (extra_count == 0)
+					return i;
+
+				if (extra_count < min_extra_flags)
+				{
+					min_extra_flags = extra_count;
+					best_index = i;
+				}
+
+				i++;
+			}
+		}
+
+		return best_index;
+	}
+
+	SurfaceDeviceInfo::SurfaceDeviceInfo(vk::PhysicalDevice device, vk::SurfaceKHR surface)
+	{
 		m_Capabilities = device.getSurfaceCapabilitiesKHR(surface);
 
 		u32 format_count;

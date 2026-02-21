@@ -8,26 +8,25 @@ namespace Na2::Graphics
 {
 	[[nodiscard]] vk::raii::SurfaceKHR CreateSurface(
 		const vk::raii::Instance& instance,
-		Window& window
+		const Window& window
 	);
 
-	class QueueFamilyIndices {
-	public:
-		QueueFamilyIndices(void) = default;
-		QueueFamilyIndices(vk::raii::PhysicalDevice, const vk::raii::SurfaceKHR&);
+	struct QueueFamilyFindInfo {
+		vk::raii::PhysicalDevice device;
+		vk::QueueFlagBits desired_flags = (vk::QueueFlagBits)0U;
+		vk::QueueFlags undesired_flags = (vk::QueueFlagBits)u32max;
 
-		[[nodiscard]] inline u32 graphics(void) const { return m_Graphics; }
-		[[nodiscard]] inline u32 compute(void) const { return m_Compute; }
-
-		[[nodiscard]] inline operator bool(void) const { return m_Graphics != u32max && m_Compute != u32max; }
-	private:
-		u32 m_Graphics = u32max, m_Compute = u32max;
+		bool present = false;
+		vk::SurfaceKHR surface = nullptr;
 	};
+
+	[[nodiscard]] u32 FindFirstQueueFamily(QueueFamilyFindInfo&&);
+	[[nodiscard]] u32 FindBestQueueFamily(QueueFamilyFindInfo&&);
 
 	class SurfaceDeviceInfo {
 	public:
 		SurfaceDeviceInfo(void) = default;
-		SurfaceDeviceInfo(vk::raii::PhysicalDevice, const vk::raii::SurfaceKHR&);
+		SurfaceDeviceInfo(vk::PhysicalDevice, vk::SurfaceKHR);
 
 		[[nodiscard]] inline vk::SurfaceCapabilitiesKHR capabilities(void) const { return m_Capabilities; }
 		[[nodiscard]] inline const ArrayList<vk::SurfaceFormatKHR>& formats(void) const { return m_Formats; }
