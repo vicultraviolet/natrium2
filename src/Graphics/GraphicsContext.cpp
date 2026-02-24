@@ -34,7 +34,7 @@ namespace Na2::Graphics
 			.applicationVersion = vk::makeApiVersion(0, 1, 0, 0),
 			.pEngineName = "Natrium2",
 			.engineVersion = vk::makeApiVersion(0, 1, 0, 0),
-			.apiVersion = vk::ApiVersion12
+			.apiVersion = vk::ApiVersion10
 		};
 
 	#ifdef NA2_USE_GLFW
