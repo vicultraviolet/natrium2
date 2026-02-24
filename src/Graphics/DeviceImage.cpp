@@ -4,7 +4,7 @@
 namespace Na2::Graphics
 {
 	vk::ImageView CreateImageView(
-		const Device& device,
+		View<const Device> device,
 		vk::Image img,
 		vk::ImageAspectFlags aspect_mask,
 		vk::Format format,
@@ -28,7 +28,7 @@ namespace Na2::Graphics
 			}
 		};
 
-		return device.logical_device().createImageView(create_info);
+		return device->logical_device().createImageView(create_info);
 	}
 
 } // namespace Na2::Graphics

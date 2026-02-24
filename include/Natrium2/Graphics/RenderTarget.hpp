@@ -1,7 +1,7 @@
 #ifndef NA2_GRAPHICS_RENDER_TARGET_HPP
 #define NA2_GRAPHICS_RENDER_TARGET_HPP
 
-#include "Natrium2/Graphics/Device.hpp"
+#include "Natrium2/Core.hpp"
 
 namespace Na2::Graphics
 {

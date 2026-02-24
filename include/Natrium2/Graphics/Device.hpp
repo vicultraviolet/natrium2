@@ -31,6 +31,8 @@ namespace Na2::Graphics
 		Device(Device&& other) noexcept;
 		Device& operator=(Device&& other) noexcept;
 
+		inline void wait_all(void) const { return m_LogicalDevice.waitIdle(); }
+
 		[[nodiscard]] inline View<const Context> context(void) const { return m_Context; }
 
 		[[nodiscard]] inline vk::PhysicalDevice physical_device(void) const { return m_PhysicalDevice; }
@@ -42,14 +44,12 @@ namespace Na2::Graphics
 		[[nodiscard]] inline vk::Queue graphics_queue(void) const { return m_Queues[m_GraphicsQueueFamily]; }
 		[[nodiscard]] inline vk::Queue present_queue(void)  const { return m_Queues[m_PresentQueueFamily]; }
 		[[nodiscard]] inline vk::Queue compute_queue(void)  const { return m_Queues[m_ComputeQueueFamily]; }
-		[[nodiscard]] inline vk::Queue transfer_queue(void) const { return m_Queues[m_TransferQueueFamily]; }
 
 		[[nodiscard]] inline const auto& queues(void) const { return m_Queues; }
 
 		[[nodiscard]] inline u32 graphics_queue_family(void) const { return m_GraphicsQueueFamily; }
 		[[nodiscard]] inline u32 present_queue_family(void)  const { return m_PresentQueueFamily; }
 		[[nodiscard]] inline u32 compute_queue_family(void)  const { return m_ComputeQueueFamily; }
-		[[nodiscard]] inline u32 transfer_queue_family(void) const { return m_TransferQueueFamily; }
 
 		[[nodiscard]] inline const auto& unique_queue_families(void) const { return m_UniqueQueueFamilies; }
 
@@ -64,11 +64,10 @@ namespace Na2::Graphics
 
 		u32 m_GraphicsQueueFamily = u32max,
 			m_PresentQueueFamily  = u32max,
-			m_ComputeQueueFamily  = u32max,
-			m_TransferQueueFamily = u32max;
-		Array<u32, 4> m_UniqueQueueFamilies;
+			m_ComputeQueueFamily  = u32max;
+		Array<u32, 3> m_UniqueQueueFamilies;
 
-		Array<vk::Queue, 4> m_Queues;
+		Array<vk::Queue, 3> m_Queues;
 	};
 } // namespace Na2::Graphics
 

@@ -6,7 +6,7 @@
 namespace Na2::Graphics
 {
 	vk::ImageView CreateImageView(
-		const Device& device,
+		View<const Device> device,
 		vk::Image img,
 		vk::ImageAspectFlags aspect_mask,
 		vk::Format format,

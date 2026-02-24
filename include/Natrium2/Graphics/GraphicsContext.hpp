@@ -10,6 +10,8 @@
 #define NA2_VK_VALIDATION_LAYERS
 #endif // NA2_CONFIG_DIST
 
+#define NA2_VERIFY_VK(x, ...) NA2_VERIFY(x == vk::Result::eSuccess, __VA_ARGS__)
+
 namespace Na2::Graphics
 {
 	struct ContextCreateInfo {

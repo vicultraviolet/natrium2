@@ -63,29 +63,24 @@ namespace Na2::Graphics
 			.desired_flags = vk::QueueFlagBits::eCompute,
 			.undesired_flags = vk::QueueFlagBits::eGraphics | vk::QueueFlagBits::eTransfer
 		});
-		m_TransferQueueFamily = FindBestQueueFamily({
-			.device = m_PhysicalDevice,
-			.desired_flags = vk::QueueFlagBits::eTransfer,
-			.undesired_flags = vk::QueueFlagBits::eGraphics | vk::QueueFlagBits::eCompute
-		});
 
 		g_Logger.printf(Info, "Selected graphics queue family index: {}", m_GraphicsQueueFamily);
 		g_Logger.printf(Info, "Selected present queue family index: {}",  m_PresentQueueFamily);
 		g_Logger.printf(Info, "Selected compute queue family index: {}",  m_ComputeQueueFamily);
-		g_Logger.printf(Info, "Selected transfer queue family index: {}", m_TransferQueueFamily);
 
 		instance.destroySurfaceKHR(temp_surface);
 
-		{
-			std::set<u32> unique_queue_families = {
-				m_GraphicsQueueFamily,
-				m_PresentQueueFamily,
-				m_ComputeQueueFamily,
-				m_TransferQueueFamily
-			};
+		m_UniqueQueueFamilies.emplace(m_GraphicsQueueFamily);
 
-			for (u32 unique_queue_family : unique_queue_families)
-				m_UniqueQueueFamilies.emplace(unique_queue_family);
+		if (m_PresentQueueFamily != m_GraphicsQueueFamily)
+		{
+			m_UniqueQueueFamilies.emplace(m_PresentQueueFamily);
+		}
+
+		if (m_ComputeQueueFamily != m_GraphicsQueueFamily &&
+			m_ComputeQueueFamily != m_PresentQueueFamily)
+		{
+			m_UniqueQueueFamilies.emplace(m_ComputeQueueFamily);
 		}
 
 		float queue_priorities[] = { 1.0f };
@@ -196,7 +191,6 @@ namespace Na2::Graphics
 
 		m_UniqueQueueFamilies.clear();
 
-		m_TransferQueueFamily = u32max;
 		m_ComputeQueueFamily = u32max;
 		m_PresentQueueFamily = u32max;
 		m_GraphicsQueueFamily = u32max;
@@ -222,10 +216,9 @@ namespace Na2::Graphics
 
 	  m_Extensions(std::move(other.m_Extensions)),
 
-	  m_TransferQueueFamily(std::exchange(other.m_TransferQueueFamily, u32max)),
-	  m_ComputeQueueFamily(std::exchange(other.m_ComputeQueueFamily, u32max)),
-	  m_PresentQueueFamily(std::exchange(other.m_PresentQueueFamily, u32max)),
 	  m_GraphicsQueueFamily(std::exchange(other.m_GraphicsQueueFamily, u32max)),
+	  m_PresentQueueFamily(std::exchange(other.m_PresentQueueFamily, u32max)),
+	  m_ComputeQueueFamily(std::exchange(other.m_ComputeQueueFamily, u32max)),
 	  m_UniqueQueueFamilies(std::move(other.m_UniqueQueueFamilies)),
 
 	  m_Queues(std::move(other.m_Queues))
@@ -249,7 +242,6 @@ namespace Na2::Graphics
 		m_GraphicsQueueFamily = std::exchange(other.m_GraphicsQueueFamily, u32max);
 		m_PresentQueueFamily  = std::exchange(other.m_PresentQueueFamily,  u32max);
 		m_ComputeQueueFamily  = std::exchange(other.m_ComputeQueueFamily,  u32max);
-		m_TransferQueueFamily = std::exchange(other.m_TransferQueueFamily, u32max);
 		m_UniqueQueueFamilies = std::move(other.m_UniqueQueueFamilies);
 
 		m_Queues = std::move(other.m_Queues);
