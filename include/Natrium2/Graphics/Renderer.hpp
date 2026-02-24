@@ -48,8 +48,6 @@ namespace Na2::Graphics
 		void begin_graphics(RenderTarget& target);
 		void end_graphics(RenderTarget& target);
 
-		inline void on_skipped_graphics(void) { m_DoGraphics = false; }
-
 		inline void next_frame(void) { m_FrameIndex = (m_FrameIndex + 1) % k_FramesInFlight; }
 
 		//void copy_buffer(const BufferCopyInfo& info);
@@ -65,11 +63,11 @@ namespace Na2::Graphics
 
 		bool m_DoGraphics = false, m_DoCompute = false;
 
-		vk::CommandPool m_GraphicsCommandPool = nullptr;
-		vk::CommandPool m_ComputeCommandPool = nullptr;
+		vk::CommandPool m_GraphicsCommandPool = nullptr,
+						m_ComputeCommandPool = nullptr,
 
-		vk::CommandPool m_TransientGraphicsCommandPool = nullptr;
-		vk::CommandPool m_TransientComputeCommandPool = nullptr;
+						m_TransientGraphicsCommandPool = nullptr,
+						m_TransientComputeCommandPool = nullptr;
 
 		Array<FrameData, k_FramesInFlight> m_FrameDatas;
 		u32 m_FrameIndex = 0;

@@ -145,11 +145,17 @@ namespace Na2::Graphics
 		const auto& fd = m_FrameDatas[m_FrameIndex];
 		vk::CommandBuffer cmd_buffer = fd.compute_cmd_buffer;
 
-		(void)m_Device->logical_device().waitForFences(
+		vk::Result result = m_Device->logical_device().waitForFences(
 			{ fd.compute_fence },
 			vk::True, // wait all
 			u64max // timeout
 		);
+		NA2_VERIFY_VK(
+			result,
+			"Failed to begin compute command recording!:"
+			"could not wait for the compute fence!"
+		);
+
 		m_Device->logical_device().resetFences({ fd.compute_fence });
 
 		cmd_buffer.reset();
@@ -322,7 +328,7 @@ namespace Na2::Graphics
 	}
 	*/
 
-	[[nodiscard]] vk::CommandBuffer Renderer::begin_transient_cmd_buffer(u32 family)
+	vk::CommandBuffer Renderer::begin_transient_cmd_buffer(u32 family)
 	{
 		vk::CommandPool cmd_pool = nullptr;
 		if (family == m_Device->graphics_queue_family())
@@ -344,8 +350,7 @@ namespace Na2::Graphics
 			.commandBufferCount = 1
 		};
 
-		vk::CommandBuffer cmd_buffer;
-		(void)m_Device->logical_device().allocateCommandBuffers(&alloc_info, &cmd_buffer);
+		vk::CommandBuffer cmd_buffer = m_Device->logical_device().allocateCommandBuffers(alloc_info)[0];
 
 		vk::CommandBufferBeginInfo begin_info
 		{
