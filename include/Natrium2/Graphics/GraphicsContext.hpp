@@ -11,6 +11,7 @@
 #endif // NA2_CONFIG_DIST
 
 #define NA2_VERIFY_VK(x, ...) NA2_VERIFY(x == vk::Result::eSuccess, __VA_ARGS__)
+#define NA2_ASSERT_VK(x, ...) NA2_ASSERT(x == vk::Result::eSuccess, __VA_ARGS__)
 
 namespace Na2::Graphics
 {
