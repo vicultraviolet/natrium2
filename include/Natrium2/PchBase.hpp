@@ -51,9 +51,11 @@
 #include <glm/glm.hpp>
 
 #define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
-#include <vulkan/vulkan_raii.hpp>
+#define VULKAN_HPP_HANDLES_MOVE_EXCHANGE
+#include <vulkan/vulkan.hpp>
 
 #include "Natrium2/Template/ArrayIterators.hpp"
+#include "Natrium2/Template/Array.hpp"
 #include "Natrium2/Template/ArrayList.hpp"
 #include "Natrium2/Template/References.hpp"
 #include "Natrium2/Template/Expected.hpp"
