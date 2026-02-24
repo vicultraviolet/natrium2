@@ -11,6 +11,8 @@ namespace Na2::Graphics
 
 	struct RendererCreateInfo {
 		View<const Device> device;
+
+		bool do_graphics = true, do_compute = false;
 	};
 
 	struct BufferCopyInfo {
@@ -23,6 +25,14 @@ namespace Na2::Graphics
 
 	class Renderer {
 	public:
+		struct FrameData {
+			vk::CommandBuffer graphics_cmd_buffer = nullptr,
+						      compute_cmd_buffer  = nullptr;
+
+			vk::Semaphore compute_finished_semaphore = nullptr;
+			vk::Fence compute_fence = nullptr;
+		};
+
 		Renderer(void) = default;
 		Renderer(const RendererCreateInfo& info);
 
@@ -32,11 +42,15 @@ namespace Na2::Graphics
 		Renderer(Renderer&& other) noexcept;
 		Renderer& operator=(Renderer&& other) noexcept;
 
-		//void begin_compute(void);
-		//void end_compute(void);
+		void begin_compute(void);
+		void end_compute(void);
 
 		void begin_graphics(RenderTarget& target);
 		void end_graphics(RenderTarget& target);
+
+		inline void on_skipped_graphics(void) { m_DoGraphics = false; }
+
+		inline void next_frame(void) { m_FrameIndex = (m_FrameIndex + 1) % k_FramesInFlight; }
 
 		//void copy_buffer(const BufferCopyInfo& info);
 
@@ -49,13 +63,15 @@ namespace Na2::Graphics
 	private:
 		View<const Device> m_Device = nullptr;
 
+		bool m_DoGraphics = false, m_DoCompute = false;
+
 		vk::CommandPool m_GraphicsCommandPool = nullptr;
 		vk::CommandPool m_ComputeCommandPool = nullptr;
 
 		vk::CommandPool m_TransientGraphicsCommandPool = nullptr;
 		vk::CommandPool m_TransientComputeCommandPool = nullptr;
 
-		Array<vk::CommandBuffer, k_FramesInFlight> m_CommandBuffers;
+		Array<FrameData, k_FramesInFlight> m_FrameDatas;
 		u32 m_FrameIndex = 0;
 	};
 }

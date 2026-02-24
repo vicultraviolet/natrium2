@@ -7,14 +7,14 @@
 
 namespace Na2::Graphics
 {
-	struct FrameData {
-		vk::Semaphore image_available_semaphore = nullptr;
-		vk::Semaphore render_finished_semaphore = nullptr;
-		vk::Fence     in_flight_fence = nullptr;
-	};
-
 	class Swapchain : public RenderTarget {
 	public:
+		struct FrameData {
+			vk::Semaphore image_available_semaphore = nullptr;
+			vk::Semaphore render_finished_semaphore = nullptr;
+			vk::Fence     in_flight_fence = nullptr;
+		};
+
 		Swapchain(void) = default;
 		Swapchain(const Device& device, const Window& window);
 

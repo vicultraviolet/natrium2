@@ -6,51 +6,109 @@
 namespace Na2::Graphics
 {
 	Renderer::Renderer(const RendererCreateInfo& info)
-	: m_Device(info.device)
+	: m_Device(info.device),
+	  m_DoGraphics(info.do_graphics),
+	  m_DoCompute(info.do_compute)
 	{
-		m_GraphicsCommandPool = m_Device->logical_device().createCommandPool(vk::CommandPoolCreateInfo{
-			.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-			.queueFamilyIndex = m_Device->graphics_queue_family()
-		});
+		vk::Device logical_device = m_Device->logical_device();
 
-		m_TransientGraphicsCommandPool = m_Device->logical_device().createCommandPool(vk::CommandPoolCreateInfo{
-			.flags = vk::CommandPoolCreateFlagBits::eTransient,
-			.queueFamilyIndex = m_Device->graphics_queue_family()
-		});
+		std::vector<vk::CommandBuffer> graphics_cmd_buffers;
 
-		if (m_Device->graphics_queue_family() == m_Device->compute_queue_family())
+		if (info.do_graphics)
 		{
-			m_ComputeCommandPool = m_GraphicsCommandPool;
-			m_TransientComputeCommandPool = m_TransientGraphicsCommandPool;
-		} else
-		{
-			m_ComputeCommandPool = m_Device->logical_device().createCommandPool(vk::CommandPoolCreateInfo{
+			m_GraphicsCommandPool = logical_device.createCommandPool(vk::CommandPoolCreateInfo{
 				.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-				.queueFamilyIndex = m_Device->compute_queue_family()
+				.queueFamilyIndex = m_Device->graphics_queue_family()
 			});
 
-			m_TransientComputeCommandPool = m_Device->logical_device().createCommandPool(vk::CommandPoolCreateInfo{
+			m_TransientGraphicsCommandPool = logical_device.createCommandPool(vk::CommandPoolCreateInfo{
 				.flags = vk::CommandPoolCreateFlagBits::eTransient,
-				.queueFamilyIndex = m_Device->compute_queue_family()
+				.queueFamilyIndex = m_Device->graphics_queue_family()
 			});
+
+			vk::CommandBufferAllocateInfo cmd_buffer_info
+			{
+				.commandPool = m_GraphicsCommandPool,
+				.level = vk::CommandBufferLevel::ePrimary,
+				.commandBufferCount = k_FramesInFlight
+			};
+
+			graphics_cmd_buffers = logical_device.allocateCommandBuffers(cmd_buffer_info);
 		}
 
-		vk::CommandBufferAllocateInfo cmd_buffer_info
-		{
-			.commandPool = m_GraphicsCommandPool,
-			.level = vk::CommandBufferLevel::ePrimary,
-			.commandBufferCount = k_FramesInFlight
-		};
-		(void)m_Device->logical_device().allocateCommandBuffers(&cmd_buffer_info, m_CommandBuffers.ptr());
+		std::vector<vk::CommandBuffer> compute_cmd_buffers;
 
-		m_CommandBuffers.set_size(k_FramesInFlight);
+		if (info.do_compute)
+		{
+			if (info.do_graphics &&
+				m_Device->graphics_queue_family() == m_Device->compute_queue_family())
+			{
+				m_ComputeCommandPool = m_GraphicsCommandPool;
+				m_TransientComputeCommandPool = m_TransientGraphicsCommandPool;
+			} else
+			{
+				m_ComputeCommandPool = logical_device.createCommandPool(vk::CommandPoolCreateInfo
+				{
+					.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+					.queueFamilyIndex = m_Device->compute_queue_family()
+				});
+
+				m_TransientComputeCommandPool = logical_device.createCommandPool(vk::CommandPoolCreateInfo
+				{
+					.flags = vk::CommandPoolCreateFlagBits::eTransient,
+					.queueFamilyIndex = m_Device->compute_queue_family()
+				});
+			}
+
+			vk::CommandBufferAllocateInfo cmd_buffer_info2
+			{
+				.commandPool = m_ComputeCommandPool,
+				.level = vk::CommandBufferLevel::ePrimary,
+				.commandBufferCount = k_FramesInFlight
+			};
+
+			compute_cmd_buffers = logical_device.allocateCommandBuffers(cmd_buffer_info2);
+		}
+
+		vk::SemaphoreCreateInfo semaphore_info{};
+
+		vk::FenceCreateInfo fence_info
+		{
+			.flags = vk::FenceCreateFlagBits::eSignaled
+		};
+
+		for (u32 i = 0; i < k_FramesInFlight; i++)
+		{
+			FrameData fd;
+
+			if (info.do_graphics)
+				fd.graphics_cmd_buffer = graphics_cmd_buffers[i];
+
+			if (info.do_compute)
+			{
+				fd.compute_cmd_buffer = compute_cmd_buffers[i];
+				fd.compute_finished_semaphore = logical_device.createSemaphore(semaphore_info);
+				fd.compute_fence = logical_device.createFence(fence_info);
+			}
+
+			m_FrameDatas.emplace(std::move(fd));
+		}
 	}
 
 	void Renderer::destroy(void)
 	{
 		m_FrameIndex = 0;
 
-		m_CommandBuffers.clear();
+		for (const auto& fd : m_FrameDatas)
+		{
+			if (fd.compute_fence)
+				m_Device->logical_device().destroyFence(fd.compute_fence);
+
+			if (fd.compute_finished_semaphore)
+				m_Device->logical_device().destroySemaphore(fd.compute_finished_semaphore);
+		}
+
+		m_FrameDatas.clear();
 
 		if (m_TransientComputeCommandPool)
 		{
@@ -76,12 +134,65 @@ namespace Na2::Graphics
 			m_GraphicsCommandPool = nullptr;
 		}
 
+		m_DoCompute = false;
+		m_DoGraphics = false;
+
 		m_Device = nullptr;
+	}
+
+	void Renderer::begin_compute(void)
+	{
+		const auto& fd = m_FrameDatas[m_FrameIndex];
+		vk::CommandBuffer cmd_buffer = fd.compute_cmd_buffer;
+
+		(void)m_Device->logical_device().waitForFences(
+			{ fd.compute_fence },
+			vk::True, // wait all
+			u64max // timeout
+		);
+		m_Device->logical_device().resetFences({ fd.compute_fence });
+
+		cmd_buffer.reset();
+
+		vk::CommandBufferBeginInfo begin_info{};
+		cmd_buffer.begin(begin_info);
+	}
+
+	void Renderer::end_compute(void)
+	{
+		static u32 x_LastFrame = u32max;
+
+		const auto& fd = m_FrameDatas[m_FrameIndex];
+
+		vk::CommandBuffer cmd_buffer = fd.compute_cmd_buffer;
+		cmd_buffer.end();
+
+		vk::SubmitInfo submit_info
+		{
+			.commandBufferCount = 1,
+			.pCommandBuffers = &cmd_buffer,
+		};
+
+		if (m_DoGraphics)
+		{
+			if (x_LastFrame != m_FrameIndex)
+			{
+				submit_info.signalSemaphoreCount = 1;
+				submit_info.pSignalSemaphores = &fd.compute_finished_semaphore;
+			}
+		}
+
+		m_Device->compute_queue().submit({ submit_info }, fd.compute_fence);
+
+		x_LastFrame = m_FrameIndex;
 	}
 
 	void Renderer::begin_graphics(RenderTarget& target)
 	{
-		vk::CommandBuffer cmd_buffer = m_CommandBuffers[m_FrameIndex];
+		m_DoGraphics = true;
+		
+		const auto& fd = m_FrameDatas[m_FrameIndex];
+		vk::CommandBuffer cmd_buffer = fd.graphics_cmd_buffer;
 
 		cmd_buffer.reset();
 
@@ -139,7 +250,8 @@ namespace Na2::Graphics
 
 	void Renderer::end_graphics(RenderTarget& target)
 	{
-		vk::CommandBuffer cmd_buffer = m_CommandBuffers[m_FrameIndex];
+		const auto& fd = m_FrameDatas[m_FrameIndex];
+		vk::CommandBuffer cmd_buffer = fd.graphics_cmd_buffer;
 
 		cmd_buffer.endRenderPass();
 
@@ -157,19 +269,32 @@ namespace Na2::Graphics
 			case RenderTargetType::Swapchain:
 			{
 				auto& swapchain = (Swapchain&)target;
-				const auto& fd = swapchain.current_frame_data();
+				const auto& swapchain_fd = swapchain.current_frame_data();
 
-				vk::PipelineStageFlags wait_stage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+				Array<vk::Semaphore, 2> wait_semaphores =
+				{
+					swapchain_fd.image_available_semaphore
+				};
 
-				submit_info.waitSemaphoreCount = 1;
-				submit_info.pWaitSemaphores = &fd.image_available_semaphore;
+				Array<vk::PipelineStageFlags, 2> wait_stages =
+				{
+					vk::PipelineStageFlagBits::eColorAttachmentOutput,
+				};
 
-				submit_info.pWaitDstStageMask = &wait_stage;
+				if (m_DoCompute)
+				{
+					wait_semaphores.emplace(fd.compute_finished_semaphore);
+					wait_stages.emplace(vk::PipelineStageFlagBits::eVertexShader);
+				}
+
+				submit_info.waitSemaphoreCount = (u32)wait_semaphores.size();
+				submit_info.pWaitSemaphores = wait_semaphores.ptr();
+				submit_info.pWaitDstStageMask = wait_stages.ptr();
 
 				submit_info.signalSemaphoreCount = 1;
-				submit_info.pSignalSemaphores = &fd.render_finished_semaphore;
+				submit_info.pSignalSemaphores = &swapchain_fd.render_finished_semaphore;
 
-				fence = fd.in_flight_fence;
+				fence = swapchain_fd.in_flight_fence;
 
 				break;
 			}
@@ -178,21 +303,7 @@ namespace Na2::Graphics
 		}
 
 		m_Device->graphics_queue().submit({ submit_info }, fence);
-
-		m_FrameIndex = (m_FrameIndex + 1) % k_FramesInFlight;
 	}
-
-	/*
-	void Renderer::begin_compute(void)
-	{
-
-	}
-
-	void Renderer::end_compute(void)
-	{
-
-	}
-	*/
 
 	/*
 	void Renderer::copy_buffer(const BufferCopyInfo& info)
@@ -278,13 +389,16 @@ namespace Na2::Graphics
 	Renderer::Renderer(Renderer&& other) noexcept
 	: m_Device(std::move(other.m_Device)),
 
+	  m_DoGraphics(std::exchange(other.m_DoGraphics, false)),
+	  m_DoCompute(std::exchange(other.m_DoCompute, false)),
+
 	  m_GraphicsCommandPool(std::move(other.m_GraphicsCommandPool)),
 	  m_ComputeCommandPool(std::move(other.m_ComputeCommandPool)),
 
 	  m_TransientGraphicsCommandPool(std::move(other.m_TransientGraphicsCommandPool)),
 	  m_TransientComputeCommandPool(std::move(other.m_TransientComputeCommandPool)),
 
-	  m_CommandBuffers(std::move(other.m_CommandBuffers)),
+	  m_FrameDatas(std::move(other.m_FrameDatas)),
 
 	  m_FrameIndex(std::exchange(other.m_FrameIndex, 0))
 	{
@@ -300,13 +414,16 @@ namespace Na2::Graphics
 
 		m_Device = std::move(other.m_Device);
 
+		m_DoGraphics = std::exchange(other.m_DoGraphics, false);
+		m_DoCompute = std::exchange(other.m_DoCompute, false);
+
 		m_GraphicsCommandPool = std::move(other.m_GraphicsCommandPool);
 		m_ComputeCommandPool = std::move(other.m_ComputeCommandPool);
 
 		m_TransientGraphicsCommandPool = std::move(other.m_TransientGraphicsCommandPool);
 		m_TransientComputeCommandPool = std::move(other.m_TransientComputeCommandPool);
 
-		m_CommandBuffers = std::move(other.m_CommandBuffers);
+		m_FrameDatas = std::move(other.m_FrameDatas);
 
 		m_FrameIndex = std::exchange(other.m_FrameIndex, 0);
 
