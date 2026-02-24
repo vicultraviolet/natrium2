@@ -7,17 +7,17 @@
 
 namespace Na2::Graphics
 {
-	vk::raii::SurfaceKHR CreateSurface(const vk::raii::Instance& instance, const Window& window)
+	vk::SurfaceKHR CreateSurface(vk::Instance instance, const Window& window)
 	{
 		VkSurfaceKHR surface = nullptr;
 	#ifdef NA2_USE_GLFW
-		VkResult result = glfwCreateWindowSurface(*instance, window.native(), nullptr, &surface);
+		VkResult result = glfwCreateWindowSurface(instance, window.native(), nullptr, &surface);
 
 		if (result != VK_SUCCESS)
 			throw std::runtime_error("Failed to create window surface!");
 	#endif // NA2_USE_GLFW
 
-		return vk::raii::SurfaceKHR(instance, surface);
+		return surface;
 	}
 
 	[[nodiscard]] static u32 countFlags(vk::QueueFlags flags)

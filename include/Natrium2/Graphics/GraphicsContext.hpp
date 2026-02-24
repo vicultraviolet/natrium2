@@ -21,10 +21,18 @@ namespace Na2::Graphics
 	public:
 		Context(void) = default;
 		Context(ContextCreateInfo&& info);
+
+		void destroy(void);
+		~Context(void) { this->destroy(); }
+
+		Context(Context&& other) noexcept;
+		Context& operator=(Context&& other) noexcept;
+
+		[[nodiscard]] inline vk::Instance instance(void) const { return m_Instance; }
+		[[nodiscard]] inline vk::DebugUtilsMessengerEXT dbg_messenger(void) const { return m_DebugMessenger; }
 	private:
-		vk::raii::Context m_Context;
-		vk::raii::Instance m_Instance = nullptr;
-		vk::raii::DebugUtilsMessengerEXT m_DebugMessenger = nullptr;
+		vk::Instance m_Instance = nullptr;
+		vk::DebugUtilsMessengerEXT m_DebugMessenger = nullptr;
 	};
 } // namespace Na2::Graphics
 

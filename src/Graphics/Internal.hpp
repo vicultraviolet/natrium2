@@ -6,13 +6,10 @@
 
 namespace Na2::Graphics
 {
-	[[nodiscard]] vk::raii::SurfaceKHR CreateSurface(
-		const vk::raii::Instance& instance,
-		const Window& window
-	);
+	[[nodiscard]] vk::SurfaceKHR CreateSurface(vk::Instance, const Window&);
 
 	struct QueueFamilyFindInfo {
-		vk::raii::PhysicalDevice device;
+		vk::PhysicalDevice device;
 		vk::QueueFlagBits desired_flags = (vk::QueueFlagBits)0U;
 		vk::QueueFlags undesired_flags = (vk::QueueFlagBits)u32max;
 

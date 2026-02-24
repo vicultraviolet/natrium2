@@ -25,23 +25,40 @@ namespace Na2::Graphics
 		Device(void) = default;
 		Device(DeviceCreateInfo&& info);
 
+		void destroy(void);
+		~Device(void) { this->destroy(); }
+
+		Device(Device&& other) noexcept;
+		Device& operator=(Device&& other) noexcept;
+
+		[[nodiscard]] inline View<const Context> context(void) const { return m_Context; }
+
 		[[nodiscard]] inline vk::PhysicalDevice physical_device(void) const { return m_PhysicalDevice; }
 		[[nodiscard]] inline vk::Device logical_device(void) const { return m_LogicalDevice; }
 
 		[[nodiscard]] inline const auto& extensions(void) const { return m_Extensions; }
 
-		[[nodiscard]] inline vk::Queue graphics_queue(void) const { return m_LogicalDevice.getQueue(m_GraphicsQueueFamily, 0); }
-		[[nodiscard]] inline vk::Queue present_queue(void)  const { return m_LogicalDevice.getQueue(m_PresentQueueFamily,  0); }
-		[[nodiscard]] inline vk::Queue compute_queue(void)  const { return m_LogicalDevice.getQueue(m_ComputeQueueFamily,  0); }
-		[[nodiscard]] inline vk::Queue transfer_queue(void) const { return m_LogicalDevice.getQueue(m_TransferQueueFamily, 0); }
+		[[nodiscard]] inline vk::Queue queue(u32 family)    const { return m_Queues[family]; }
+		[[nodiscard]] inline vk::Queue graphics_queue(void) const { return m_Queues[m_GraphicsQueueFamily]; }
+		[[nodiscard]] inline vk::Queue present_queue(void)  const { return m_Queues[m_PresentQueueFamily]; }
+		[[nodiscard]] inline vk::Queue compute_queue(void)  const { return m_Queues[m_ComputeQueueFamily]; }
+		[[nodiscard]] inline vk::Queue transfer_queue(void) const { return m_Queues[m_TransferQueueFamily]; }
+
+		[[nodiscard]] inline const auto& queues(void) const { return m_Queues; }
 
 		[[nodiscard]] inline u32 graphics_queue_family(void) const { return m_GraphicsQueueFamily; }
 		[[nodiscard]] inline u32 present_queue_family(void)  const { return m_PresentQueueFamily; }
 		[[nodiscard]] inline u32 compute_queue_family(void)  const { return m_ComputeQueueFamily; }
 		[[nodiscard]] inline u32 transfer_queue_family(void) const { return m_TransferQueueFamily; }
+
+		[[nodiscard]] inline const auto& unique_queue_families(void) const { return m_UniqueQueueFamilies; }
+
+		[[nodiscard]] inline operator bool (void) const { return m_Context; }
 	private:
-		vk::raii::PhysicalDevice m_PhysicalDevice = nullptr;
-		vk::raii::Device m_LogicalDevice = nullptr;
+		View<const Context> m_Context = nullptr;
+
+		vk::PhysicalDevice m_PhysicalDevice = nullptr;
+		vk::Device m_LogicalDevice = nullptr;
 		
 		std::set<DeviceExtension> m_Extensions;
 
@@ -49,6 +66,9 @@ namespace Na2::Graphics
 			m_PresentQueueFamily  = u32max,
 			m_ComputeQueueFamily  = u32max,
 			m_TransferQueueFamily = u32max;
+		Array<u32, 4> m_UniqueQueueFamilies;
+
+		Array<vk::Queue, 4> m_Queues;
 	};
 } // namespace Na2::Graphics
 

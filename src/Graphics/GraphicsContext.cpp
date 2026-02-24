@@ -19,14 +19,14 @@ namespace Na2::Graphics
 
 	Context::Context(ContextCreateInfo&& info)
 	{
-#ifdef NA2_VK_VALIDATION_LAYERS
+	#ifdef NA2_VK_VALIDATION_LAYERS
 		const ArrayList<const char*>& validation_layers = {
 			"VK_LAYER_KHRONOS_validation"
 		};
 
 		if (!validationLayersSupported(validation_layers))
 			throw std::runtime_error("Validation layers requested, but not supported!");
-#endif // NA2_VK_VALIDATION_LAYERS
+	#endif // NA2_VK_VALIDATION_LAYERS
 
 		vk::ApplicationInfo app_info
 		{
@@ -37,7 +37,7 @@ namespace Na2::Graphics
 			.apiVersion = vk::ApiVersion12
 		};
 
-#ifdef NA2_USE_GLFW
+	#ifdef NA2_USE_GLFW
 		u32 glfw_extension_count = 0;
 		const char** glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
 
@@ -45,13 +45,13 @@ namespace Na2::Graphics
 
 		for (u32 i = 0; i < glfw_extension_count; i++)
 			instance_extensions.emplace(glfw_extensions[i]);
-#else 
+	#else 
 		ArrayList<const char*> instance_extensions(1);
-#endif // NA2_USE_GLFW
+	#endif // NA2_USE_GLFW
 
 		vk::InstanceCreateInfo instance_info;
 
-#ifdef NA2_VK_VALIDATION_LAYERS
+	#ifdef NA2_VK_VALIDATION_LAYERS
 		auto debug_messenger_info = debugMessengerInfo();
 		instance_info.pNext = &debug_messenger_info;
 
@@ -59,18 +59,18 @@ namespace Na2::Graphics
 		instance_info.ppEnabledLayerNames = validation_layers.ptr();
 		
 		instance_extensions.emplace(vk::EXTDebugUtilsExtensionName);
-#endif // NA2_VK_VALIDATION_LAYERS
+	#endif // NA2_VK_VALIDATION_LAYERS
 
 		instance_info.pApplicationInfo = &app_info;
 
 		instance_info.enabledExtensionCount = (u32)instance_extensions.size();
 		instance_info.ppEnabledExtensionNames = instance_extensions.ptr();
 
-		m_Instance = vk::raii::Instance(m_Context, instance_info);
+		m_Instance = vk::createInstance(instance_info);
 
-#ifdef NA2_VK_VALIDATION_LAYERS
-		m_DebugMessenger = vk::raii::DebugUtilsMessengerEXT(m_Instance, debug_messenger_info);
-#endif // NA2_VK_VALIDATION_LAYERS
+	#ifdef NA2_VK_VALIDATION_LAYERS
+		m_DebugMessenger = m_Instance.createDebugUtilsMessengerEXT(debug_messenger_info);
+	#endif // NA2_VK_VALIDATION_LAYERS
 	}
 
 	static bool validationLayersSupported(const ArrayList<const char*>& requested_layers)
@@ -151,4 +151,66 @@ namespace Na2::Graphics
 
 		return vk::False;
 	}
+
+	void Context::destroy(void)
+	{
+		if (m_DebugMessenger)
+		{
+			m_Instance.destroyDebugUtilsMessengerEXT(m_DebugMessenger);
+			m_DebugMessenger = nullptr;
+		}
+
+		if (m_Instance)
+		{
+			m_Instance.destroy();
+			m_DebugMessenger = nullptr;
+		}
+	}
+
+	Context::Context(Context&& other) noexcept
+	: m_Instance(std::move(other.m_Instance)),
+	  m_DebugMessenger(std::move(other.m_DebugMessenger))
+	{}
+
+	Context& Context::operator=(Context&& other) noexcept
+	{
+		if (this == &other)
+			return *this;
+
+		this->destroy();
+
+		m_Instance = std::move(other.m_Instance);
+		m_DebugMessenger = std::move(other.m_DebugMessenger);
+
+		return *this;
+	}
 } // namespace Na2::Graphics
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDebugUtilsMessengerEXT(
+	VkInstance                                  instance,
+	const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
+	const VkAllocationCallbacks* pAllocator,
+	VkDebugUtilsMessengerEXT* pMessenger)
+{
+	auto fn = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+		instance,
+		"vkCreateDebugUtilsMessengerEXT"
+	);
+	if (!fn)
+		return VK_ERROR_EXTENSION_NOT_PRESENT;
+
+	return fn(instance, pCreateInfo, pAllocator, pMessenger);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyDebugUtilsMessengerEXT(
+	VkInstance                                  instance,
+	VkDebugUtilsMessengerEXT                    messenger,
+	const VkAllocationCallbacks* pAllocator)
+{
+	auto fn = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+		instance,
+		"vkDestroyDebugUtilsMessengerEXT"
+	);
+
+	fn(instance, messenger, pAllocator);
+}

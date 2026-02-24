@@ -8,19 +8,20 @@
 namespace Na2::Graphics
 {
 	static i32 ratePhysicalDevice(
-		vk::raii::PhysicalDevice device,
+		vk::PhysicalDevice device,
 		const ArrayList<const char*>& extensions
 	);
 
-	static bool queueFamiliesSupported(vk::raii::PhysicalDevice device);
+	static bool queueFamiliesSupported(vk::PhysicalDevice device);
 
 	static bool requiredExtensionsSupported(
-		vk::raii::PhysicalDevice device,
+		vk::PhysicalDevice device,
 		const ArrayList<const char*>& extensions
 	);
 
 	Device::Device(DeviceCreateInfo&& info)
-	: m_Extensions(std::move(info.extensions))
+	: m_Context(info.context),
+	  m_Extensions(std::move(info.extensions))
 	{
 		const auto& instance = info.context->m_Instance;
 
@@ -43,9 +44,9 @@ namespace Na2::Graphics
 			}
 		}
 
-		NA2_VERIFY(*m_PhysicalDevice, "No suitable GPU!");
+		NA2_VERIFY(m_PhysicalDevice, "No suitable GPU!");
 
-		vk::raii::SurfaceKHR temp_surface = CreateSurface(instance, info.window);
+		vk::SurfaceKHR temp_surface = CreateSurface(instance, info.window);
 
 		m_GraphicsQueueFamily = FindBestQueueFamily({
 			.device = m_PhysicalDevice,
@@ -73,15 +74,25 @@ namespace Na2::Graphics
 		g_Logger.printf(Info, "Selected compute queue family index: {}",  m_ComputeQueueFamily);
 		g_Logger.printf(Info, "Selected transfer queue family index: {}", m_TransferQueueFamily);
 
+		instance.destroySurfaceKHR(temp_surface);
+
+		{
+			std::set<u32> unique_queue_families = {
+				m_GraphicsQueueFamily,
+				m_PresentQueueFamily,
+				m_ComputeQueueFamily,
+				m_TransferQueueFamily
+			};
+
+			for (u32 unique_queue_family : unique_queue_families)
+				m_UniqueQueueFamilies.emplace(unique_queue_family);
+		}
+
 		float queue_priorities[] = { 1.0f };
 
-		std::set<u32> unique_queue_families = {
-			m_GraphicsQueueFamily, m_PresentQueueFamily, m_ComputeQueueFamily, m_TransferQueueFamily
-		};
+		ArrayList<vk::DeviceQueueCreateInfo> queue_infos(m_UniqueQueueFamilies.size());
 
-		ArrayList<vk::DeviceQueueCreateInfo> queue_infos(4);
-
-		for (u32 unique_queue_family : unique_queue_families)
+		for (u32 unique_queue_family : m_UniqueQueueFamilies)
 			queue_infos.emplace(vk::DeviceQueueCreateInfo{
 				.queueFamilyIndex = unique_queue_family,
 				.queueCount = 1,
@@ -107,15 +118,18 @@ namespace Na2::Graphics
 			.pEnabledFeatures = &device_features
 		};
 
-		m_LogicalDevice = vk::raii::Device(m_PhysicalDevice, device_info);
+		m_LogicalDevice = m_PhysicalDevice.createDevice(device_info);
+
+		for (u32 unique_queue_family : m_UniqueQueueFamilies)
+			m_Queues.emplace(m_LogicalDevice.getQueue(unique_queue_family, 0));
 	}
 
 	static i32 ratePhysicalDevice(
-		vk::raii::PhysicalDevice device,
+		vk::PhysicalDevice device,
 		const ArrayList<const char*>& extensions
 	)
 	{
-		if (!*device)
+		if (!device)
 			return -1;
 
 		auto properties = device.getProperties();
@@ -139,7 +153,7 @@ namespace Na2::Graphics
 		return properties.limits.maxImageDimension2D;
 	}
 
-	static bool queueFamiliesSupported(vk::raii::PhysicalDevice device)
+	static bool queueFamiliesSupported(vk::PhysicalDevice device)
 	{
 		bool graphics = false, compute = false, transfer = false;
 
@@ -163,7 +177,7 @@ namespace Na2::Graphics
 	}
 
 	static bool requiredExtensionsSupported(
-		vk::raii::PhysicalDevice device,
+		vk::PhysicalDevice device,
 		const ArrayList<const char*>& extensions
 	)
 	{
@@ -175,4 +189,72 @@ namespace Na2::Graphics
 
 		return required_extensions.empty();
 	}
+
+	void Device::destroy(void)
+	{
+		m_Queues.clear();
+
+		m_UniqueQueueFamilies.clear();
+
+		m_TransferQueueFamily = u32max;
+		m_ComputeQueueFamily = u32max;
+		m_PresentQueueFamily = u32max;
+		m_GraphicsQueueFamily = u32max;
+
+		m_Extensions.clear();
+
+		if (m_LogicalDevice)
+		{
+			m_LogicalDevice.destroy();
+			m_LogicalDevice = nullptr;
+		}
+
+		m_PhysicalDevice = nullptr;
+
+		m_Context = nullptr;
+	}
+
+	Device::Device(Device&& other) noexcept
+	: m_Context(std::move(other.m_Context)),
+
+	  m_PhysicalDevice(std::move(other.m_PhysicalDevice)),
+	  m_LogicalDevice(std::move(other.m_LogicalDevice)),
+
+	  m_Extensions(std::move(other.m_Extensions)),
+
+	  m_TransferQueueFamily(std::exchange(other.m_TransferQueueFamily, u32max)),
+	  m_ComputeQueueFamily(std::exchange(other.m_ComputeQueueFamily, u32max)),
+	  m_PresentQueueFamily(std::exchange(other.m_PresentQueueFamily, u32max)),
+	  m_GraphicsQueueFamily(std::exchange(other.m_GraphicsQueueFamily, u32max)),
+	  m_UniqueQueueFamilies(std::move(other.m_UniqueQueueFamilies)),
+
+	  m_Queues(std::move(other.m_Queues))
+	{}
+
+	Device& Device::operator=(Device&& other) noexcept
+	{
+		if (this == &other)
+			return *this;
+
+		if (m_LogicalDevice)
+			m_LogicalDevice.destroy();
+
+		m_Context = std::move(other.m_Context);
+
+		m_PhysicalDevice = std::move(other.m_PhysicalDevice);
+		m_LogicalDevice = std::move(other.m_LogicalDevice);
+
+		m_Extensions = std::move(other.m_Extensions);
+
+		m_GraphicsQueueFamily = std::exchange(other.m_GraphicsQueueFamily, u32max);
+		m_PresentQueueFamily  = std::exchange(other.m_PresentQueueFamily,  u32max);
+		m_ComputeQueueFamily  = std::exchange(other.m_ComputeQueueFamily,  u32max);
+		m_TransferQueueFamily = std::exchange(other.m_TransferQueueFamily, u32max);
+		m_UniqueQueueFamilies = std::move(other.m_UniqueQueueFamilies);
+
+		m_Queues = std::move(other.m_Queues);
+
+		return *this;
+	}
+
 } // namespace Na2::Graphics
