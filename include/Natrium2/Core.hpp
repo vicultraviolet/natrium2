@@ -127,6 +127,12 @@ namespace Na2
     }
 
     enum class init { init };
+
+    template<typename T>
+    concept Dereferenceable = requires(T obj)
+    {
+        *obj;
+    };
 } // namespace Na2
 
 #endif // NA2_CORE_HPP

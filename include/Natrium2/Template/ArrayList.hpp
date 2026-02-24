@@ -5,11 +5,6 @@
 
 namespace Na2
 {
-	template<typename T>
-	concept Dereferenceable = requires(T obj) {
-		*obj;
-	};
-
 	template<typename T, typename t_Allocator = std::allocator<T>>
 	class ArrayList {
 	public:
@@ -151,6 +146,34 @@ namespace Na2
 
 			return *this;
 		}
+
+		ArrayList(std::vector<T>&& other) noexcept
+			requires std::same_as<t_Allocator, std::allocator<T>> 
+		: m_Capacity(other.capacity()),
+		  m_Size(other.size()),
+		  m_Buffer(other.data()),
+		  m_Allocator(other.get_allocator())
+		{
+			Byte buffer[sizeof(std::vector<T>)];
+			new (&buffer) std::vector<T>(std::move(other));
+		}
+
+		ArrayList& operator=(std::vector<T>&& other) noexcept
+			requires std::same_as<t_Allocator, std::allocator<T>> 
+		{
+			this->destroy();
+
+			m_Capacity = other.capacity();
+			m_Size = other.size();
+			m_Buffer = other.data();
+			m_Allocator = other.get_allocator();
+
+			Byte buffer[sizeof(std::vector<T>)];
+			new (&buffer) std::vector<T>(std::move(other));
+
+			return *this;
+		}
+
 
 		void set_size(u64 size)
 		{
