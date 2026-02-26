@@ -58,7 +58,7 @@ namespace Na2
 		for (u64 i = 0; i < m_Layers.size(); i++)
 		{
 			m_Layers[i]->on_detach();
-			m_Layers[i].~Rc();
+			m_Layers[i].release();
 		}
 		m_Layers.set_size(0);
 	}

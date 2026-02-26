@@ -15,7 +15,7 @@ namespace Na2
 		All = Enabled | Updatable | Visible
 	};
 
-	class Layer {
+	class Layer : public RefCounted {
 	public:
 		Layer(i64 priority = 0) : m_Priority(priority) {}
 		virtual ~Layer(void) = default;

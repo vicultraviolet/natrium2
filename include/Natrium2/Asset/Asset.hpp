@@ -6,7 +6,7 @@
 
 namespace Na2
 {
-	class Asset {
+	class Asset : public RefCounted {
 	public:
 		Asset(void) = default;
 		Asset(const UUID_t& uuid) : m_UUID(uuid) {}

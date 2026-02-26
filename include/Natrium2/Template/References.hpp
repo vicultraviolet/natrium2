@@ -111,8 +111,8 @@ namespace Na2
 	template<typename T>
 	struct RcControlBlock {
 		T* ptr = nullptr;
-		std::atomic<u64> strong_count = 0;
-		std::atomic<u64> weak_count = 0;
+		std::atomic<u32> strong_count = 0;
+		std::atomic<u32> weak_count = 0;
 
 		RcControlBlock(void) = default;
 		~RcControlBlock(void) { delete ptr; }
@@ -136,21 +136,21 @@ namespace Na2
 	class Weak;
 
 	template<typename T>
-	class Rc {
+	class NonIntrusiveRc {
 	public:
 		using ControlBlock = RcControlBlock<T>;
 
-		Rc(void) = default;
-		~Rc(void) { this->release(); }
+		NonIntrusiveRc(void) = default;
+		~NonIntrusiveRc(void) { this->release(); }
 
-		Rc(nullptr_t) {}
-		Rc& operator=(nullptr_t)
+		NonIntrusiveRc(nullptr_t) {}
+		NonIntrusiveRc& operator=(nullptr_t)
 		{
 			this->release();
 			return *this;
 		}
 
-		explicit Rc(ControlBlock* cb)
+		explicit NonIntrusiveRc(ControlBlock* cb)
 		: m_ControlBlock(cb)
 		{
 			if (m_ControlBlock)
@@ -158,20 +158,20 @@ namespace Na2
 		}
 
 		template<typename... t_Args>
-		static Rc Make(t_Args&&... __args)
+		static NonIntrusiveRc Make(t_Args&&... __args)
 		{
-			return Rc(ControlBlock::Make(std::forward<t_Args>(__args)...));
+			return NonIntrusiveRc(ControlBlock::Make(std::forward<t_Args>(__args)...));
 		}
 
-		Rc(Box<T>&& unique)
-		: Rc(new ControlBlock(unique.release()))
+		NonIntrusiveRc(Box<T>&& unique)
+		: NonIntrusiveRc(new ControlBlock(unique.release()))
 		{}
 
-		Rc(const Rc& other)
-		: Rc(other.m_ControlBlock)
+		NonIntrusiveRc(const NonIntrusiveRc& other)
+		: NonIntrusiveRc(other.m_ControlBlock)
 		{}
 
-		Rc& operator=(const Rc& other)
+		NonIntrusiveRc& operator=(const NonIntrusiveRc& other)
 		{
 			if (m_ControlBlock == other.m_ControlBlock)
 				return *this;
@@ -186,11 +186,11 @@ namespace Na2
 			return *this;
 		}
 
-		Rc(Rc&& other) noexcept
+		NonIntrusiveRc(NonIntrusiveRc&& other) noexcept
 		: m_ControlBlock(std::exchange(other.m_ControlBlock, nullptr))
 		{}
 
-		Rc& operator=(Rc&& other) noexcept
+		NonIntrusiveRc& operator=(NonIntrusiveRc&& other) noexcept
 		{
 			if (m_ControlBlock == other.m_ControlBlock)
 				return *this;
@@ -198,10 +198,11 @@ namespace Na2
 			this->release();
 			if (other)
 				m_ControlBlock = std::exchange(other.m_ControlBlock, nullptr);
+
 			return *this;
 		}
 
-		void swap(Rc& other)
+		void swap(NonIntrusiveRc& other)
 		{
 			std::swap(m_ControlBlock, other.m_ControlBlock);
 		}
@@ -212,32 +213,32 @@ namespace Na2
 				return;
 
 			m_ControlBlock->dec_strong_count();
-			if (!m_ControlBlock->strong_count)
+			if (!m_ControlBlock->strong_count.load())
 			{
 				delete m_ControlBlock->ptr;
 				m_ControlBlock->ptr = nullptr;
 
-				if (!m_ControlBlock->weak_count)
+				if (!m_ControlBlock->weak_count.load())
 					delete m_ControlBlock;
 			}
 			m_ControlBlock = nullptr;
 		}
 
 		template<typename U, std::enable_if_t<std::is_base_of_v<U, T>, int> = 0>
-		[[nodiscard]] operator Rc<U>(void) const
+		[[nodiscard]] operator NonIntrusiveRc<U>(void) const
 		{
-			return Rc<U>((typename Rc<U>::ControlBlock*)this->m_ControlBlock);
+			return NonIntrusiveRc<U>((typename NonIntrusiveRc<U>::ControlBlock*)m_ControlBlock);
 		}
 
-		[[nodiscard]] inline u64 strong_count(void) const { return m_ControlBlock->strong_count.load(); }
-		[[nodiscard]] inline u64 weak_count(void) const { return m_ControlBlock->weak_count.load(); }
+		[[nodiscard]] inline u32 strong_count(void) const { return m_ControlBlock->strong_count.load(); }
+		[[nodiscard]] inline u32 weak_count(void) const { return m_ControlBlock->weak_count.load(); }
 
 		[[nodiscard]] inline T* ptr(void) const { return m_ControlBlock->ptr; }
 		[[nodiscard]] inline T& operator*(void) const { return *m_ControlBlock->ptr; }
 		[[nodiscard]] inline T* operator->(void) const { return m_ControlBlock->ptr; }
 
-		[[nodiscard]] inline auto operator<=>(const Rc& other) const { return m_ControlBlock->ptr <=> other.m_ControlBlock->ptr; }
-		[[nodiscard]] inline auto operator==(const Rc& other) const { return m_ControlBlock->ptr == other.m_ControlBlock->ptr; }
+		[[nodiscard]] inline auto operator<=>(const NonIntrusiveRc& other) const { return m_ControlBlock->ptr <=> other.m_ControlBlock->ptr; }
+		[[nodiscard]] inline auto operator==(const NonIntrusiveRc& other) const { return m_ControlBlock == other.m_ControlBlock; }
 
 		[[nodiscard]] inline bool expired(void) const { return !m_ControlBlock || !m_ControlBlock->strong_count.load(); }
 		[[nodiscard]] inline operator bool(void) const { return m_ControlBlock; }
@@ -246,28 +247,25 @@ namespace Na2
 		friend class Weak<const T>;
 
 		template<typename To, typename From>
-		friend Rc<To> static_ref_cast(const Rc<From>& from);
+		friend NonIntrusiveRc<To> static_ref_cast(const NonIntrusiveRc<From>& from);
 
 		template<typename To, typename From>
-		friend Rc<To> dynamic_ref_cast(const Rc<From>& from);
+		friend NonIntrusiveRc<To> dynamic_ref_cast(const NonIntrusiveRc<From>& from);
 
 		ControlBlock* m_ControlBlock = nullptr;
 	};
 
-	template<typename T>
-	using Ref = Rc<T>;
-
 	template<typename To, typename From>
-	[[nodiscard]] Rc<To> static_ref_cast(const Rc<From>& from)
+	[[nodiscard]] NonIntrusiveRc<To> static_ref_cast(const NonIntrusiveRc<From>& from)
 	{
 		if (!from)
 			return nullptr;
 
-		return Rc<To>((RcControlBlock<To>*)from.m_ControlBlock);
+		return NonIntrusiveRc<To>((RcControlBlock<To>*)from.m_ControlBlock);
 	}
 
 	template<typename To, typename From>
-	[[nodiscard]] Rc<To> dynamic_ref_cast(const Rc<From>& from)
+	[[nodiscard]] NonIntrusiveRc<To> dynamic_ref_cast(const NonIntrusiveRc<From>& from)
 	{
 		if (!from)
 			return nullptr;
@@ -277,7 +275,8 @@ namespace Na2
 		To* casted_ptr = dynamic_cast<To*>(const_cast<std::remove_const_t<std::remove_pointer_t<FromPtr>>*>(from.ptr()));
 		if (!casted_ptr)
 			return nullptr;
-		return Rc<To>((RcControlBlock<To>*)from.m_ControlBlock);
+
+		return NonIntrusiveRc<To>((RcControlBlock<To>*)from.m_ControlBlock);
 	}
 
 	template<typename T>
@@ -335,11 +334,11 @@ namespace Na2
 			return *this;
 		}
 
-		Weak(const Rc<T>& ref)
+		Weak(const NonIntrusiveRc<T>& ref)
 		: Weak(ref.m_ControlBlock)
 		{}
 
-		Weak& operator=(const Rc<T>& ref)
+		Weak& operator=(const NonIntrusiveRc<T>& ref)
 		{
 			if (m_ControlBlock == ref.m_ControlBlock)
 				return *this;
@@ -352,14 +351,14 @@ namespace Na2
 		}
 
 		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
-		Weak(const Rc<U>& ref)
-		: Weak((const Rc<T>&)ref)
+		Weak(const NonIntrusiveRc<U>& ref)
+		: Weak((const NonIntrusiveRc<T>&)ref)
 		{}
 
 		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
-		Weak& operator=(const Rc<U>& ref)
+		Weak& operator=(const NonIntrusiveRc<U>& ref)
 		{
-			return this->operator=((const Rc<T>&)ref);
+			return this->operator=((const NonIntrusiveRc<T>&)ref);
 		}
 
 		void release(void)
@@ -368,15 +367,15 @@ namespace Na2
 				return;
 
 			m_ControlBlock->dec_weak_count();
-			if (!m_ControlBlock->weak_count && !m_ControlBlock->strong_count)
+			if (!m_ControlBlock->weak_count.load() && !m_ControlBlock->strong_count.load())
 				delete m_ControlBlock;
 
 			m_ControlBlock = nullptr;
 		}
 
-		[[nodiscard]] Rc<T> lock(void) const
+		[[nodiscard]] NonIntrusiveRc<T> lock(void) const
 		{
-			return m_ControlBlock->strong_count.load() ? Rc<T>(m_ControlBlock) : nullptr;
+			return m_ControlBlock->strong_count.load() ? NonIntrusiveRc<T>(m_ControlBlock) : nullptr;
 		}
 
 		template<typename U, std::enable_if_t<std::is_base_of_v<U, T>, int> = 0>
@@ -385,12 +384,14 @@ namespace Na2
 			return Weak<U>((typename Weak<U>::ControlBlock*)this->m_ControlBlock);
 		}
 
+		[[nodiscard]] inline auto operator==(const Weak& other) const { return m_ControlBlock == other.m_ControlBlock; }
+
 		[[nodiscard]] inline bool expired(void) const { return !m_ControlBlock || !m_ControlBlock->strong_count.load(); }
 
 		[[nodiscard]] inline u64 strong_count(void) const { return m_ControlBlock->strong_count.load(); }
 		[[nodiscard]] inline u64 weak_count(void) const { return m_ControlBlock->weak_count.load(); }
 
-		[[nodiscard]] inline operator bool(void) const { return m_ControlBlock;  }
+		[[nodiscard]] inline operator bool(void) const { return m_ControlBlock; }
 	private:
 		template<typename To, typename From>
 		friend Weak<To> static_ref_cast(const Weak<From>& from);
@@ -416,7 +417,7 @@ namespace Na2
 		if (!from)
 			return nullptr;
 
-		Rc<From> locked = from.lock();
+		NonIntrusiveRc<From> locked = from.lock();
 		if (!locked)
 			return nullptr;
 
@@ -428,6 +429,155 @@ namespace Na2
 
 		return Weak<To>((RcControlBlock<To>*)from.m_ControlBlock);
 	}
+
+	class RefCounted {
+	public:
+		void inc_strong_count(void) const { m_StrongCount.fetch_add(1, std::memory_order_relaxed); }
+		void dec_strong_count(void) const { m_StrongCount.fetch_sub(1, std::memory_order_relaxed); }
+
+		[[nodiscard]] inline u32 strong_count(void) const { return m_StrongCount.load(); }
+	private:
+		mutable std::atomic<u32> m_StrongCount = 0;
+	};
+
+	template<typename T>
+	class IntrusiveRc {
+	public:
+		IntrusiveRc(void) = default;
+		~IntrusiveRc(void) { this->release(); }
+
+		IntrusiveRc(nullptr_t) {}
+		IntrusiveRc& operator=(nullptr_t)
+		{
+			this->release();
+			return *this;
+		}
+
+		explicit IntrusiveRc(T* ptr)
+		: m_Ptr(ptr)
+		{
+			if (m_Ptr)
+				m_Ptr->inc_strong_count();
+		}
+
+		template<typename... t_Args>
+		static IntrusiveRc Make(t_Args&&... __args)
+		{
+			return IntrusiveRc(new T(std::forward<t_Args>(__args)...));
+		}
+
+		IntrusiveRc(Box<T>&& unique)
+		: m_Ptr(unique.release())
+		{}
+
+		IntrusiveRc(const IntrusiveRc& other)
+		: IntrusiveRc(other.m_Ptr)
+		{}
+
+		IntrusiveRc& operator=(const IntrusiveRc& other)
+		{
+			if (m_Ptr == other.m_Ptr)
+				return *this;
+
+			this->release();
+			if (other)
+			{
+				m_Ptr = other.m_Ptr;
+				m_Ptr->inc_strong_count();
+			}
+
+			return *this;
+		}
+
+		IntrusiveRc(IntrusiveRc&& other) noexcept
+		: m_Ptr(std::exchange(other.m_Ptr, nullptr))
+		{}
+
+		IntrusiveRc& operator=(IntrusiveRc&& other) noexcept
+		{
+			if (m_Ptr == other.m_Ptr)
+				return *this;
+
+			this->release();
+			if (other)
+				m_Ptr = std::exchange(other.m_Ptr, nullptr);
+
+			return *this;
+		}
+
+		void swap(IntrusiveRc& other)
+		{
+			std::swap(m_Ptr, other.m_Ptr);
+		}
+
+		void release(void)
+		{
+			if (!m_Ptr)
+				return;
+
+			m_Ptr->dec_strong_count();
+			if (!m_Ptr->strong_count())
+			{
+				delete m_Ptr;
+			}
+			m_Ptr = nullptr;
+		}
+
+		template<typename U, std::enable_if_t<std::is_base_of_v<U, T>, int> = 0>
+		[[nodiscard]] operator IntrusiveRc<U>(void) const
+		{
+			return IntrusiveRc<U>((U*)m_Ptr);
+		}
+
+		[[nodiscard]] inline u64 strong_count(void) const { return m_Ptr->strong_count(); }
+
+		[[nodiscard]] inline T* ptr(void) const { return m_Ptr; }
+		[[nodiscard]] inline T& operator*(void) const { return *m_Ptr; }
+		[[nodiscard]] inline T* operator->(void) const { return m_Ptr; }
+
+		[[nodiscard]] inline auto operator<=>(const IntrusiveRc& other) const { return m_Ptr <=> other.m_Ptr; }
+		[[nodiscard]] inline auto operator==(const IntrusiveRc& other) const { return m_Ptr == other.m_Ptr; }
+
+		[[nodiscard]] inline operator bool(void) const { return m_Ptr; }
+	private:
+		template<typename To, typename From>
+		friend IntrusiveRc<To> static_ref_cast(const IntrusiveRc<From>& from);
+
+		template<typename To, typename From>
+		friend IntrusiveRc<To> dynamic_ref_cast(const IntrusiveRc<From>& from);
+
+		T* m_Ptr = nullptr;
+	};
+
+	template<typename To, typename From>
+	[[nodiscard]] IntrusiveRc<To> static_ref_cast(const IntrusiveRc<From>& from)
+	{
+		if (!from)
+			return nullptr;
+
+		return IntrusiveRc<To>((To*)from.m_Ptr);
+	}
+
+	template<typename To, typename From>
+	[[nodiscard]] IntrusiveRc<To> dynamic_ref_cast(const IntrusiveRc<From>& from)
+	{
+		if (!from)
+			return nullptr;
+
+		using FromPtr = decltype(from.m_Ptr);
+
+		To* casted_ptr = dynamic_cast<To*>(const_cast<std::remove_const_t<std::remove_pointer_t<FromPtr>>*>(from.m_Ptr));
+		if (!casted_ptr)
+			return nullptr;
+		return IntrusiveRc<To>((To*)from.m_Ptr);
+	}
+
+	template<typename T>
+	using Rc = std::conditional_t<
+		std::is_base_of_v<RefCounted, T>,
+		IntrusiveRc<T>,
+		NonIntrusiveRc<T>
+	>;
 
 	template<typename T>
 	class View {
@@ -455,13 +605,18 @@ namespace Na2
 		{}
 
 		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
-		View(const Rc<U>& ref)
+		View(const NonIntrusiveRc<U>& ref)
 		: m_Ptr(ref ? (T*)ref.ptr() : nullptr)
 		{}
 
 		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
 		View(const Weak<U>& ref)
 		: m_Ptr(ref ? (T*)ref.lock().ptr() : nullptr)
+		{}
+
+		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
+		View(const IntrusiveRc<U>& ref)
+		: m_Ptr(ref ? (T*)ref.ptr() : nullptr)
 		{}
 
 		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
@@ -472,7 +627,7 @@ namespace Na2
 		}
 
 		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
-		View& operator=(const Rc<U>& ref)
+		View& operator=(const NonIntrusiveRc<U>& ref)
 		{
 			m_Ptr = ref ? (T*)ref.ptr() : nullptr;
 			return *this;
@@ -482,6 +637,13 @@ namespace Na2
 		View& operator=(const Weak<U>& ref)
 		{
 			m_Ptr = ref ? (T*)ref.lock().ptr() : nullptr;
+			return *this;
+		}
+
+		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
+		View& operator=(const IntrusiveRc<U>& ref)
+		{
+			m_Ptr = ref ? (T*)ref.ptr() : nullptr;
 			return *this;
 		}
 
