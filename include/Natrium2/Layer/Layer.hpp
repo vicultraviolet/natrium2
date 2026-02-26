@@ -15,7 +15,7 @@ namespace Na2
 		All = Enabled | Updatable | Visible
 	};
 
-	class Layer : public RefCounted {
+	class Layer : public IntrusiveRcBase {
 	public:
 		Layer(i64 priority = 0) : m_Priority(priority) {}
 		virtual ~Layer(void) = default;

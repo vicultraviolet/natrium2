@@ -6,7 +6,7 @@
 
 namespace Na2
 {
-	class Asset : public RefCounted {
+	class Asset : public IntrusiveRcBase {
 	public:
 		Asset(void) = default;
 		Asset(const UUID_t& uuid) : m_UUID(uuid) {}

@@ -430,7 +430,7 @@ namespace Na2
 		return Weak<To>((RcControlBlock<To>*)from.m_ControlBlock);
 	}
 
-	class RefCounted {
+	class IntrusiveRcBase {
 	public:
 		void inc_strong_count(void) const { m_StrongCount.fetch_add(1, std::memory_order_relaxed); }
 		void dec_strong_count(void) const { m_StrongCount.fetch_sub(1, std::memory_order_relaxed); }
@@ -574,7 +574,7 @@ namespace Na2
 
 	template<typename T>
 	using Rc = std::conditional_t<
-		std::is_base_of_v<RefCounted, T>,
+		std::is_base_of_v<IntrusiveRcBase, T>,
 		IntrusiveRc<T>,
 		NonIntrusiveRc<T>
 	>;
