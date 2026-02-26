@@ -6,20 +6,20 @@
 namespace Na2
 {
 	template<typename T>
-	class UniqueRef {
+	class Box {
 	public:
-		UniqueRef(void) = default;
-		~UniqueRef(void) { this->destroy(); }
+		Box(void) = default;
+		~Box(void) { this->destroy(); }
 
-		UniqueRef(nullptr_t) {};
-		UniqueRef& operator=(nullptr_t)
+		Box(nullptr_t) {};
+		Box& operator=(nullptr_t)
 		{
 			this->destroy();
 			return *this;
 		}
 
-		UniqueRef(T* ptr) : m_Ptr(ptr) {}
-		UniqueRef& operator=(T* ptr)
+		Box(T* ptr) : m_Ptr(ptr) {}
+		Box& operator=(T* ptr)
 		{
 			this->destroy();
 			m_Ptr = ptr;
@@ -27,26 +27,26 @@ namespace Na2
 		}
 
 		template<typename... t_Args>
-		static UniqueRef Make(t_Args&&... __args)
+		static Box Make(t_Args&&... __args)
 		{
-			return UniqueRef(new T(std::forward<t_Args>(__args)...));
+			return Box(new T(std::forward<t_Args>(__args)...));
 		}
 
-		UniqueRef(const UniqueRef& other) = delete;
-		UniqueRef& operator=(const UniqueRef& other) = delete;
+		Box(const Box& other) = delete;
+		Box& operator=(const Box& other) = delete;
 
-		UniqueRef(UniqueRef&& other) noexcept
+		Box(Box&& other) noexcept
 		: m_Ptr(std::exchange(other.m_Ptr, nullptr))
 		{}
 
-		UniqueRef& operator=(UniqueRef&& other) noexcept
+		Box& operator=(Box&& other) noexcept
 		{
 			this->destroy();
 			m_Ptr = std::exchange(other.m_Ptr, nullptr);
 			return *this;
 		}
 
-		void swap(UniqueRef& other)
+		void swap(Box& other)
 		{
 			std::swap(m_Ptr, other.m_Ptr);
 		}
@@ -68,70 +68,61 @@ namespace Na2
 		}
 
 		template<typename U, std::enable_if_t<std::is_base_of_v<U, T>, int> = 0>
-		[[nodiscard]] inline operator UniqueRef<U>(void)&& { return UniqueRef<U>(this->release()); }
+		[[nodiscard]] inline operator Box<U>(void)&& { return Box<U>(this->release()); }
 
 		[[nodiscard]] inline T* ptr(void) const { return m_Ptr; }
 		[[nodiscard]] inline T& operator*(void) const { return *m_Ptr; }
 		[[nodiscard]] inline T* operator->(void) const { return m_Ptr; }
 
-		[[nodiscard]] inline auto operator<=>(const UniqueRef& other) const { return m_Ptr <=> other.m_Ptr; }
-		[[nodiscard]] inline auto operator==(const UniqueRef& other) const { return m_Ptr == other.m_Ptr; }
+		[[nodiscard]] inline auto operator<=>(const Box& other) const { return m_Ptr <=> other.m_Ptr; }
+		[[nodiscard]] inline auto operator==(const Box& other) const { return m_Ptr == other.m_Ptr; }
 
 		[[nodiscard]] inline operator bool(void) const { return m_Ptr; }
 	private:
 		template<typename To, typename From>
-		friend UniqueRef<To> static_ref_cast(UniqueRef<From>&& from);
+		friend Box<To> static_ref_cast(Box<From>&& from);
 
 		template<typename To, typename From>
-		friend UniqueRef<To> dynamic_ref_cast(UniqueRef<From>&& from);
+		friend Box<To> dynamic_ref_cast(Box<From>&& from);
 
 		T* m_Ptr = nullptr;
 	};
 
-	template<typename T, typename... t_Args>
-	UniqueRef<T> MakeUnique(t_Args&&... __args)
-	{
-		return UniqueRef<T>::Make(std::forward<t_Args>(__args)...);
-	}
-
-	template<typename T>
-	using ConstUniqueRef = UniqueRef<const T>;
-
 	template<typename To, typename From>
-	UniqueRef<To> static_ref_cast(UniqueRef<From>&& from)
+	[[nodiscard]] Box<To> static_ref_cast(Box<From>&& from)
 	{
 		using FromPtr = decltype(from.ptr());
 		To* casted = (To*)const_cast<std::remove_const_t<std::remove_pointer_t<FromPtr>>*>(from.ptr());
 		from.release();
-		return UniqueRef<To>(casted);
+		return Box<To>(casted);
 	}
 
 	template<typename To, typename From>
-	UniqueRef<To> dynamic_ref_cast(UniqueRef<From>&& from)
+	[[nodiscard]] Box<To> dynamic_ref_cast(Box<From>&& from)
 	{
 		using FromPtr = decltype(from.ptr());
 		To* casted = dynamic_cast<To*>(const_cast<std::remove_const_t<std::remove_pointer_t<FromPtr>>*>(from.ptr()));
 		if (!casted)
 			return nullptr;
 		from.release();
-		return UniqueRef<To>(casted);
+		return Box<To>(casted);
 	}
 
 	template<typename T>
-	struct RefControlBlock {
+	struct RcControlBlock {
 		T* ptr = nullptr;
 		std::atomic<u64> strong_count = 0;
 		std::atomic<u64> weak_count = 0;
 
-		RefControlBlock(void) = default;
-		~RefControlBlock(void) { delete ptr; }
+		RcControlBlock(void) = default;
+		~RcControlBlock(void) { delete ptr; }
 
-		RefControlBlock(T* ptr) : ptr(ptr) {}
+		RcControlBlock(T* ptr) : ptr(ptr) {}
 
 		template<typename... t_Args>
-		static RefControlBlock* Make(t_Args&&... __args)
+		static RcControlBlock* Make(t_Args&&... __args)
 		{
-			return new RefControlBlock(new T(std::forward<t_Args>(__args)...));
+			return new RcControlBlock(new T(std::forward<t_Args>(__args)...));
 		}
 
 		void inc_strong_count(void) { this->strong_count.fetch_add(1, std::memory_order_relaxed); }
@@ -142,24 +133,24 @@ namespace Na2
 	};
 
 	template<typename T>
-	class WeakRef;
+	class Weak;
 
 	template<typename T>
-	class Ref {
+	class Rc {
 	public:
-		using ControlBlock = RefControlBlock<T>;
+		using ControlBlock = RcControlBlock<T>;
 
-		Ref(void) = default;
-		~Ref(void) { this->release(); }
+		Rc(void) = default;
+		~Rc(void) { this->release(); }
 
-		Ref(nullptr_t) {}
-		Ref& operator=(nullptr_t)
+		Rc(nullptr_t) {}
+		Rc& operator=(nullptr_t)
 		{
 			this->release();
 			return *this;
 		}
 
-		explicit Ref(ControlBlock* cb)
+		explicit Rc(ControlBlock* cb)
 		: m_ControlBlock(cb)
 		{
 			if (m_ControlBlock)
@@ -167,20 +158,20 @@ namespace Na2
 		}
 
 		template<typename... t_Args>
-		static Ref Make(t_Args&&... __args)
+		static Rc Make(t_Args&&... __args)
 		{
-			return Ref(ControlBlock::Make(std::forward<t_Args>(__args)...));
+			return Rc(ControlBlock::Make(std::forward<t_Args>(__args)...));
 		}
 
-		Ref(UniqueRef<T>&& unique)
-		: Ref(new ControlBlock(unique.release()))
+		Rc(Box<T>&& unique)
+		: Rc(new ControlBlock(unique.release()))
 		{}
 
-		Ref(const Ref& other)
-		: Ref(other.m_ControlBlock)
+		Rc(const Rc& other)
+		: Rc(other.m_ControlBlock)
 		{}
 
-		Ref& operator=(const Ref& other)
+		Rc& operator=(const Rc& other)
 		{
 			if (m_ControlBlock == other.m_ControlBlock)
 				return *this;
@@ -195,11 +186,11 @@ namespace Na2
 			return *this;
 		}
 
-		Ref(Ref&& other) noexcept
+		Rc(Rc&& other) noexcept
 		: m_ControlBlock(std::exchange(other.m_ControlBlock, nullptr))
 		{}
 
-		Ref& operator=(Ref&& other) noexcept
+		Rc& operator=(Rc&& other) noexcept
 		{
 			if (m_ControlBlock == other.m_ControlBlock)
 				return *this;
@@ -210,7 +201,7 @@ namespace Na2
 			return *this;
 		}
 
-		void swap(Ref& other)
+		void swap(Rc& other)
 		{
 			std::swap(m_ControlBlock, other.m_ControlBlock);
 		}
@@ -233,9 +224,9 @@ namespace Na2
 		}
 
 		template<typename U, std::enable_if_t<std::is_base_of_v<U, T>, int> = 0>
-		[[nodiscard]] operator Ref<U>(void) const
+		[[nodiscard]] operator Rc<U>(void) const
 		{
-			return Ref<U>((typename Ref<U>::ControlBlock*)this->m_ControlBlock);
+			return Rc<U>((typename Rc<U>::ControlBlock*)this->m_ControlBlock);
 		}
 
 		[[nodiscard]] inline u64 strong_count(void) const { return m_ControlBlock->strong_count.load(); }
@@ -245,56 +236,38 @@ namespace Na2
 		[[nodiscard]] inline T& operator*(void) const { return *m_ControlBlock->ptr; }
 		[[nodiscard]] inline T* operator->(void) const { return m_ControlBlock->ptr; }
 
-		[[nodiscard]] inline auto operator<=>(const Ref& other) const { return m_ControlBlock->ptr <=> other.m_ControlBlock->ptr; }
-		[[nodiscard]] inline auto operator==(const Ref& other) const { return m_ControlBlock->ptr == other.m_ControlBlock->ptr; }
+		[[nodiscard]] inline auto operator<=>(const Rc& other) const { return m_ControlBlock->ptr <=> other.m_ControlBlock->ptr; }
+		[[nodiscard]] inline auto operator==(const Rc& other) const { return m_ControlBlock->ptr == other.m_ControlBlock->ptr; }
 
 		[[nodiscard]] inline bool expired(void) const { return !m_ControlBlock || !m_ControlBlock->strong_count.load(); }
 		[[nodiscard]] inline operator bool(void) const { return m_ControlBlock; }
 	private:
-		friend class WeakRef<T>;
-		friend class WeakRef<const T>;
+		friend class Weak<T>;
+		friend class Weak<const T>;
 
 		template<typename To, typename From>
-		friend Ref<To> static_ref_cast(const Ref<From>& from);
+		friend Rc<To> static_ref_cast(const Rc<From>& from);
 
 		template<typename To, typename From>
-		friend Ref<To> dynamic_ref_cast(const Ref<From>& from);
+		friend Rc<To> dynamic_ref_cast(const Rc<From>& from);
 
 		ControlBlock* m_ControlBlock = nullptr;
 	};
 
-	template<typename T, typename... t_Args>
-	Ref<T> MakeRef(t_Args&&... __args)
-	{
-		return Ref<T>::Make(std::forward<t_Args>(__args)...);
-	}
-	
 	template<typename T>
-	using ConstRef = Ref<const T>;
-
-	template<typename T>
-	using SharedRef = Ref<T>;
-
-	template<typename T>
-	using ConstSharedRef = SharedRef<const T>;
-
-	template<typename T, typename... t_Args>
-	SharedRef<T> MakeShared(t_Args&&... __args)
-	{
-		return SharedRef<T>::Make(std::forward<t_Args>(__args)...);
-	}
+	using Ref = Rc<T>;
 
 	template<typename To, typename From>
-	Ref<To> static_ref_cast(const Ref<From>& from)
+	[[nodiscard]] Rc<To> static_ref_cast(const Rc<From>& from)
 	{
 		if (!from)
 			return nullptr;
 
-		return Ref<To>((RefControlBlock<To>*)from.m_ControlBlock);
+		return Rc<To>((RcControlBlock<To>*)from.m_ControlBlock);
 	}
 
 	template<typename To, typename From>
-	Ref<To> dynamic_ref_cast(const Ref<From>& from)
+	[[nodiscard]] Rc<To> dynamic_ref_cast(const Rc<From>& from)
 	{
 		if (!from)
 			return nullptr;
@@ -304,35 +277,35 @@ namespace Na2
 		To* casted_ptr = dynamic_cast<To*>(const_cast<std::remove_const_t<std::remove_pointer_t<FromPtr>>*>(from.ptr()));
 		if (!casted_ptr)
 			return nullptr;
-		return Ref<To>((RefControlBlock<To>*)from.m_ControlBlock);
+		return Rc<To>((RcControlBlock<To>*)from.m_ControlBlock);
 	}
 
 	template<typename T>
-	class WeakRef {
+	class Weak {
 	public:
-		using ControlBlock = RefControlBlock<T>;
+		using ControlBlock = RcControlBlock<T>;
 
-		WeakRef(void) = default;
-		~WeakRef(void) { this->release(); }
+		Weak(void) = default;
+		~Weak(void) { this->release(); }
 
-		WeakRef(nullptr_t) {}
-		WeakRef& operator=(nullptr_t)
+		Weak(nullptr_t) {}
+		Weak& operator=(nullptr_t)
 		{
 			this->release();
 			return *this;
 		}
 
-		explicit WeakRef(ControlBlock* cb) : m_ControlBlock(cb)
+		explicit Weak(ControlBlock* cb) : m_ControlBlock(cb)
 		{
 			if (m_ControlBlock)
 				m_ControlBlock->inc_weak_count();
 		}
 
-		WeakRef(const WeakRef& other)
-		: WeakRef(other.m_ControlBlock)
+		Weak(const Weak& other)
+		: Weak(other.m_ControlBlock)
 		{}
 
-		WeakRef& operator=(const WeakRef& other)
+		Weak& operator=(const Weak& other)
 		{
 			if (m_ControlBlock == other.m_ControlBlock)
 				return *this;
@@ -346,11 +319,11 @@ namespace Na2
 			return *this;
 		}
 
-		WeakRef(WeakRef&& other) noexcept
+		Weak(Weak&& other) noexcept
 		: m_ControlBlock(std::exchange(other.m_ControlBlock, nullptr))
 		{}
 
-		WeakRef& operator=(WeakRef&& other) noexcept
+		Weak& operator=(Weak&& other) noexcept
 		{
 			if (m_ControlBlock == other.m_ControlBlock)
 				return *this;
@@ -362,11 +335,11 @@ namespace Na2
 			return *this;
 		}
 
-		WeakRef(const Ref<T>& ref)
-		: WeakRef(ref.m_ControlBlock)
+		Weak(const Rc<T>& ref)
+		: Weak(ref.m_ControlBlock)
 		{}
 
-		WeakRef& operator=(const Ref<T>& ref)
+		Weak& operator=(const Rc<T>& ref)
 		{
 			if (m_ControlBlock == ref.m_ControlBlock)
 				return *this;
@@ -379,14 +352,14 @@ namespace Na2
 		}
 
 		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
-		WeakRef(const Ref<U>& ref)
-		: WeakRef((const Ref<T>&)ref)
+		Weak(const Rc<U>& ref)
+		: Weak((const Rc<T>&)ref)
 		{}
 
 		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
-		WeakRef& operator=(const Ref<U>& ref)
+		Weak& operator=(const Rc<U>& ref)
 		{
-			return this->operator=((const Ref<T>&)ref);
+			return this->operator=((const Rc<T>&)ref);
 		}
 
 		void release(void)
@@ -401,15 +374,15 @@ namespace Na2
 			m_ControlBlock = nullptr;
 		}
 
-		[[nodiscard]] Ref<T> lock(void) const
+		[[nodiscard]] Rc<T> lock(void) const
 		{
-			return m_ControlBlock->strong_count.load() ? Ref<T>(m_ControlBlock) : nullptr;
+			return m_ControlBlock->strong_count.load() ? Rc<T>(m_ControlBlock) : nullptr;
 		}
 
 		template<typename U, std::enable_if_t<std::is_base_of_v<U, T>, int> = 0>
-		[[nodiscard]] operator WeakRef<U>(void) const
+		[[nodiscard]] operator Weak<U>(void) const
 		{
-			return WeakRef<U>((typename WeakRef<U>::ControlBlock*)this->m_ControlBlock);
+			return Weak<U>((typename Weak<U>::ControlBlock*)this->m_ControlBlock);
 		}
 
 		[[nodiscard]] inline bool expired(void) const { return !m_ControlBlock || !m_ControlBlock->strong_count.load(); }
@@ -420,33 +393,30 @@ namespace Na2
 		[[nodiscard]] inline operator bool(void) const { return m_ControlBlock;  }
 	private:
 		template<typename To, typename From>
-		friend WeakRef<To> static_ref_cast(const WeakRef<From>& from);
+		friend Weak<To> static_ref_cast(const Weak<From>& from);
 
 		template<typename To, typename From>
-		friend WeakRef<To> dynamic_ref_cast(const WeakRef<From>& from);
+		friend Weak<To> dynamic_ref_cast(const Weak<From>& from);
 
 		ControlBlock* m_ControlBlock = nullptr;
 	};
 
-	template<typename T>
-	using ConstWeakRef = WeakRef<const T>;
-
 	template<typename To, typename From>
-	WeakRef<To> static_ref_cast(const WeakRef<From>& from)
+	[[nodiscard]] Weak<To> static_ref_cast(const Weak<From>& from)
 	{
 		if (!from)
 			return nullptr;
 
-		return WeakRef<To>((RefControlBlock<To>*)from.m_ControlBlock);
+		return Weak<To>((RcControlBlock<To>*)from.m_ControlBlock);
 	}
 
 	template<typename To, typename From>
-	WeakRef<To> dynamic_ref_cast(const WeakRef<From>& from)
+	[[nodiscard]] Weak<To> dynamic_ref_cast(const Weak<From>& from)
 	{
 		if (!from)
 			return nullptr;
 
-		Ref<From> locked = from.lock();
+		Rc<From> locked = from.lock();
 		if (!locked)
 			return nullptr;
 
@@ -456,77 +426,77 @@ namespace Na2
 		if (!casted_ptr)
 			return nullptr;
 
-		return WeakRef<To>((RefControlBlock<To>*)from.m_ControlBlock);
+		return Weak<To>((RcControlBlock<To>*)from.m_ControlBlock);
 	}
 
 	template<typename T>
-	class ViewRef {
+	class View {
 	public:
-		ViewRef(void) = default;
-		~ViewRef(void) = default;
+		View(void) = default;
+		~View(void) = default;
 
-		ViewRef(nullptr_t) {}
-		ViewRef& operator=(nullptr_t)
+		View(nullptr_t) {}
+		View& operator=(nullptr_t)
 		{
 			this->destroy();
 			return *this;
 		}
 
-		ViewRef(T* ptr) : m_Ptr(ptr) {}
-		ViewRef& operator=(T* ptr)
+		View(T* ptr) : m_Ptr(ptr) {}
+		View& operator=(T* ptr)
 		{
 			m_Ptr = ptr;
 			return *this;
 		}
 
 		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
-		ViewRef(const UniqueRef<U>& ref)
+		View(const Box<U>& ref)
 		: m_Ptr((T*)ref.ptr())
 		{}
 
 		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
-		ViewRef(const Ref<U>& ref)
+		View(const Rc<U>& ref)
 		: m_Ptr(ref ? (T*)ref.ptr() : nullptr)
 		{}
 
 		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
-		ViewRef(const WeakRef<U>& ref)
+		View(const Weak<U>& ref)
 		: m_Ptr(ref ? (T*)ref.lock().ptr() : nullptr)
 		{}
 
 		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
-		ViewRef& operator=(const UniqueRef<U>& ref)
+		View& operator=(const Box<U>& ref)
 		{
 			m_Ptr = (T*)ref.ptr();
 			return *this;
 		}
 
 		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
-		ViewRef& operator=(const Ref<U>& ref)
+		View& operator=(const Rc<U>& ref)
 		{
 			m_Ptr = ref ? (T*)ref.ptr() : nullptr;
 			return *this;
 		}
 
 		template<typename U, std::enable_if_t<std::is_convertible_v<U*, T*>, int> = 0>
-		ViewRef& operator=(const WeakRef<U>& ref)
+		View& operator=(const Weak<U>& ref)
 		{
 			m_Ptr = ref ? (T*)ref.lock().ptr() : nullptr;
 			return *this;
 		}
 
-		ViewRef(const ViewRef& other) = default;
-		ViewRef& operator=(const ViewRef& other)
+		View(const View& other) = default;
+		View& operator=(const View& other)
 		{
 			m_Ptr = other.m_Ptr;
 			return *this;
 		}
 
-		ViewRef(ViewRef&& other) noexcept
+		View(View&& other) noexcept
 		: m_Ptr(std::exchange(other.m_Ptr, nullptr))
 		{}
 
-		ViewRef& operator=(ViewRef&& other) noexcept
+		View& operator=(View&& other) noexcept
 		{
 			if (m_Ptr == other.m_Ptr)
 				return *this;
@@ -535,7 +505,7 @@ namespace Na2
 			return *this;
 		}
 
-		void swap(ViewRef& other)
+		void swap(View& other)
 		{
 			std::swap(m_Ptr, other.m_Ptr);
 		}
@@ -556,49 +526,40 @@ namespace Na2
 		}
 
 		template<typename U, std::enable_if_t<std::is_base_of_v<U, T>, int> = 0>
-		[[nodiscard]] inline operator ViewRef<U>(void) { return ViewRef<U>(m_Ptr); }
+		[[nodiscard]] inline operator View<U>(void) const { return View<U>(m_Ptr); }
 
 		[[nodiscard]] inline T* ptr(void) const { return m_Ptr; }
 		[[nodiscard]] inline T& operator*(void) const { return *m_Ptr; }
 		[[nodiscard]] inline T* operator->(void) const { return m_Ptr; }
 
-		[[nodiscard]] inline auto operator<=>(const ViewRef& other) const { return m_Ptr <=> other.m_Ptr; }
-		[[nodiscard]] inline auto operator==(const ViewRef& other) const { return m_Ptr == other.m_Ptr; }
+		[[nodiscard]] inline auto operator<=>(const View& other) const { return m_Ptr <=> other.m_Ptr; }
+		[[nodiscard]] inline auto operator==(const View& other) const { return m_Ptr == other.m_Ptr; }
 
 		[[nodiscard]] inline operator bool(void) const { return m_Ptr; }
 	private:
 		template<typename To, typename From>
-		friend ViewRef<To> static_ref_cast(const ViewRef<From>& from);
+		friend View<To> static_ref_cast(const View<From>& from);
 
 		template<typename To, typename From>
-		friend ViewRef<To> dynamic_ref_cast(const ViewRef<From>& from);
+		friend View<To> dynamic_ref_cast(const View<From>& from);
 
 		T* m_Ptr = nullptr;
 	};
 
-	template<typename T>
-	using ConstViewRef = ViewRef<const T>;
-
-	template<typename T>
-	using View = ViewRef<T>;
-
-	template<typename T>
-	using ConstView = View<const T>;
-
 	template<typename To, typename From>
-	ViewRef<To> static_ref_cast(const ViewRef<From>& from)
+	[[nodiscard]] View<To> static_ref_cast(const View<From>& from)
 	{
 		using FromPtr = decltype(from.ptr());
 		To* casted = (To*)const_cast<std::remove_const_t<std::remove_pointer_t<FromPtr>>*>(from.ptr());
-		return ViewRef<To>(casted);
+		return View<To>(casted);
 	}
 
 	template<typename To, typename From>
-	ViewRef<To> dynamic_ref_cast(const ViewRef<From>& from)
+	[[nodiscard]] View<To> dynamic_ref_cast(const View<From>& from)
 	{
 		using FromPtr = decltype(from.ptr());
 		To* casted = dynamic_cast<To*>(const_cast<std::remove_const_t<std::remove_pointer_t<FromPtr>>*>(from.ptr()));
-		return ViewRef<To>(casted);
+		return View<To>(casted);
 	}
 } // namespace Na2
 

@@ -19,14 +19,14 @@ namespace Na2
 		void destroy(void);
 
 		template<typename T, typename... t_Args>
-		[[nodiscard]] Ref<T> create_asset(const std::string& name, t_Args&&... __args)
+		[[nodiscard]] Rc<T> create_asset(const std::string& name, t_Args&&... __args)
 		{
 			if (auto asset = this->get_by_name(name))
 			{
 				return dynamic_ref_cast<T>(asset);
 			}
 
-			Ref<T> asset = m_Registry.create_asset<T>(name, std::forward<t_Args>(__args)...);
+			Rc<T> asset = m_Registry.create_asset<T>(name, std::forward<t_Args>(__args)...);
 
 			m_Assets.try_emplace(asset->uuid(), asset);
 
@@ -35,17 +35,17 @@ namespace Na2
 
 		void destroy_asset(const UUID_t& uuid);
 
-		[[nodiscard]] Ref<Asset> get(const UUID_t& uuid) const;
-		[[nodiscard]] Ref<Asset> get_by_name(const std::string& name) const;
+		[[nodiscard]] Rc<Asset> get(const UUID_t& uuid) const;
+		[[nodiscard]] Rc<Asset> get_by_name(const std::string& name) const;
 
 		template<typename T>
-		[[nodiscard]] Ref<T> get(const UUID_t& uuid) const
+		[[nodiscard]] Rc<T> get(const UUID_t& uuid) const
 		{
 			return dynamic_ref_cast<T>(this->get(uuid));
 		}
 
 		template<typename T>
-		[[nodiscard]] Ref<T> get_by_name(const std::string& name) const
+		[[nodiscard]] Rc<T> get_by_name(const std::string& name) const
 		{
 			return dynamic_ref_cast<T>(this->get_by_name(name));
 		}
@@ -57,7 +57,7 @@ namespace Na2
 		[[nodiscard]] inline const auto& asset_registry_path(void) const { return m_AssetRegistryPath; }
 	private:
 		AssetRegistry m_Registry;
-		std::unordered_map<UUID_t, Ref<Asset>> m_Assets;
+		std::unordered_map<UUID_t, Rc<Asset>> m_Assets;
 
 		std::filesystem::path m_AssetRegistryPath;
 	};

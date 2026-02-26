@@ -52,7 +52,7 @@ namespace Na2
 	concept DerivedLayer = std::is_base_of<Layer, T>::value && !std::is_same<Layer, T>::value;
 
 	template<DerivedLayer T, typename... t_Args>
-	inline Ref<T> MakeLayer(t_Args&&... __args) { return MakeRef<T>(std::forward<t_Args>(__args)...); }
+	inline Rc<T> MakeLayer(t_Args&&... __args) { return MakeRef<T>(std::forward<t_Args>(__args)...); }
 
 	inline LayerStateFlag operator|(LayerStateFlag lhs, LayerStateFlag rhs) { return (LayerStateFlag)((u8)lhs | (u8)rhs); }
 	inline LayerStateFlag operator&(LayerStateFlag lhs, LayerStateFlag rhs) { return (LayerStateFlag)((u8)lhs & (u8)rhs); }

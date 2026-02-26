@@ -17,7 +17,7 @@ namespace Na2
 		}
 	}
 
-	void LayerManager::attach_layer(Ref<Layer> layer)
+	void LayerManager::attach_layer(Rc<Layer> layer)
 	{
 		layer->on_attach();
 
@@ -25,7 +25,7 @@ namespace Na2
 		this->resort();
 	}
 
-	void LayerManager::detach_layer(Ref<Layer> layer)
+	void LayerManager::detach_layer(Rc<Layer> layer)
 	{
 		layer->on_detach();
 
@@ -58,12 +58,12 @@ namespace Na2
 		for (u64 i = 0; i < m_Layers.size(); i++)
 		{
 			m_Layers[i]->on_detach();
-			m_Layers[i].~Ref();
+			m_Layers[i].~Rc();
 		}
 		m_Layers.set_size(0);
 	}
 
-	void LayerManager::set_layer_priority(Ref<Layer> layer, i64 new_priority)
+	void LayerManager::set_layer_priority(Rc<Layer> layer, i64 new_priority)
 	{
 		layer->m_Priority = new_priority;
 		this->resort();

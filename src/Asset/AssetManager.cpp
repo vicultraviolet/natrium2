@@ -20,7 +20,7 @@ namespace Na2
 		m_Assets.erase(uuid);
 	}
 
-	Ref<Asset> AssetManager::get(const UUID_t& uuid) const
+	Rc<Asset> AssetManager::get(const UUID_t& uuid) const
 	{
 		if (uuid.is_nil())
 			return nullptr;
@@ -32,7 +32,7 @@ namespace Na2
 		return nullptr;
 	}
 
-	Ref<Asset> AssetManager::get_by_name(const std::string& name) const
+	Rc<Asset> AssetManager::get_by_name(const std::string& name) const
 	{
 		return this->get(this->get_uuid_by_name(name));
 	}
